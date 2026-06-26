@@ -1,0 +1,8 @@
+# Build artifacts — the deployable site zip is generated from site/, not source.
+# Regenerate with: cd site && zip -r ../qualiacology-site-netlify.zip . -x '*.md'
+/qualiacology-site-netlify.zip
+*.zip
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
