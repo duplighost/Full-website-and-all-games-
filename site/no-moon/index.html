@@ -43973,8 +43973,10 @@ function drawHudBossMiniStats(p, layout) {
     function testerTapEnabled75() {
       try {
         if (typeof window === 'undefined') return false;
-        const q = String(location.search || '') + String(location.hash || '');
-        const enabled = /noMoonTester=1|testerUnlock=1|unlockPassengers=1|devUnlock=1|#tester/i.test(q) || localStorage.getItem('noMoonEnableSecretTesterUnlock') === 'true';
+        // Tester-unlock arms ONLY via a deliberate localStorage flag (devtools), not via
+        // guessable URL/hash tokens — those let any visitor unlock all passengers by sharing
+        // a link like ?testerUnlock=1, which defeated progression on the public build.
+        const enabled = localStorage.getItem('noMoonEnableSecretTesterUnlock') === 'true';
         window.NO_MOON_ENABLE_SECRET_TEST_UNLOCK = !!enabled;
         return !!enabled;
       } catch(_) { return false; }

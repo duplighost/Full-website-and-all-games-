@@ -85,7 +85,9 @@ export function boot() {
   );
   showTitle(menu);
   updateHud();
-  installDebug(actions);
+  // Debug/cheat API (window.oneRoomDebug) only on an opt-in ?debug flag — was always-on,
+  // exposing grant/skipRound/killAll/live() to every visitor. Keeps the public build clean.
+  if (new URLSearchParams(location.search).has('debug') || location.hash.includes('debug')) installDebug(actions);
 
   addEventListener('pagehide', finalSave);
   addEventListener('beforeunload', finalSave);

@@ -352,5 +352,8 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 
-// expose a little for debugging / automated testing
-window.__MARROW = { scene, player, director, go, Audio, ctx, interaction, getLevel: () => currentLevel, started: () => started };
+// expose a little for debugging / automated testing — only on an opt-in ?debug flag so the
+// go() level-teleport and mutable scene/director aren't a public surface on the live build.
+if (new URLSearchParams(location.search).has('debug') || location.hash.includes('debug')) {
+  window.__MARROW = { scene, player, director, go, Audio, ctx, interaction, getLevel: () => currentLevel, started: () => started };
+}
