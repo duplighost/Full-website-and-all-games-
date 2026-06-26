@@ -650,7 +650,7 @@ class InputState {
 class ChunkManager {
   constructor(scene, player, quality) {
     this.scene = scene; this.player = player; this.quality = quality;
-    this.loadR = quality === 'low' ? 1 : 2;
+    this.loadR = quality === 'high' ? 2 : 1; // medium/low load 9 chunks instead of 25 — the biggest draw-call cut
     this.detail = quality === 'high' ? 16 : quality === 'medium' ? 12 : 9;
     this.chunks = new Map();
     this.buildQueue = [];
@@ -660,7 +660,7 @@ class ChunkManager {
     this.activeScratch = { interactables: [], rails: [], destructibles: [] };
     this.tmpColor = new THREE.Color();
     this.shadowCasters = quality === 'high' && !IS_TOUCH;
-    this.lightBudget = quality === 'high' ? 3 : quality === 'medium' ? 1 : 0;
+    this.lightBudget = quality === 'high' ? 2 : quality === 'medium' ? 1 : 0;
     this.geos = {
       box: new THREE.BoxGeometry(1, 1, 1), sphere: new THREE.SphereGeometry(1, 16, 10), cone: new THREE.ConeGeometry(1, 1, 8), cyl: new THREE.CylinderGeometry(1, 1, 1, 16),
       roof: new THREE.ConeGeometry(1, 1, 4), torus: new THREE.TorusGeometry(1, 0.07, 8, 36)
@@ -895,16 +895,16 @@ class ChunkManager {
     }
     // breakable lumen caches at street level near the central plaza
     for (let i = 0; i < 4; i++) if (rng() > 0.4) this.addPod(ctx, randRangeR(rng, -7, 7), randRangeR(rng, -7, 7), rng() > 0.5 ? 0xff4fd8 : 0x62f7ff);
-    // lightline rails through the city grid.
-    const h = this.heightAt(ctx.ox, ctx.oz) + 3.0;
-    this.addRail(ctx, new THREE.Vector3(ctx.ox - CHUNK / 2, h, ctx.oz), new THREE.Vector3(ctx.ox + CHUNK / 2, h + 0.5, ctx.oz), 0x62f7ff);
-    if (ctx.rng() > 0.45) this.addRail(ctx, new THREE.Vector3(ctx.ox, h + 2, ctx.oz - CHUNK / 2), new THREE.Vector3(ctx.ox, h + 1.2, ctx.oz + CHUNK / 2), 0xff4fd8);
+    // lightline rails through the city grid — start near ground so you can step on, rise gently.
+    this.addRail(ctx, new THREE.Vector3(ctx.ox - CHUNK / 2, this.heightAt(ctx.ox - CHUNK / 2, ctx.oz) + 0.6, ctx.oz), new THREE.Vector3(ctx.ox + CHUNK / 2, this.heightAt(ctx.ox + CHUNK / 2, ctx.oz) + 2.2, ctx.oz), 0x62f7ff);
+    this.addRail(ctx, new THREE.Vector3(ctx.ox, this.heightAt(ctx.ox, ctx.oz - CHUNK / 2) + 0.6, ctx.oz - CHUNK / 2), new THREE.Vector3(ctx.ox, this.heightAt(ctx.ox, ctx.oz + CHUNK / 2) + 2.0, ctx.oz + CHUNK / 2), 0xff4fd8);
   }
   genMeadow(ctx) {
     for (let i = 0; i < 18; i++) this.addTree(ctx, randCell(ctx.rng), randCell(ctx.rng), ctx.rng() > 0.75 ? 1.4 : 1.0);
     for (let i = 0; i < 14; i++) this.addCrystal(ctx, randCell(ctx.rng), randCell(ctx.rng), ctx.rng() > 0.5 ? 0xffd36e : 0x62f7ff, randRangeR(ctx.rng, 0.45, 1.1));
     for (let i = 0; i < 3; i++) if (ctx.rng() > 0.5) this.addPod(ctx, randCell(ctx.rng), randCell(ctx.rng), 0x75ffb1);
-    if (ctx.rng() > 0.55) this.addRail(ctx, new THREE.Vector3(ctx.ox - 36, this.heightAt(ctx.ox - 36, ctx.oz + 23) + 1.4, ctx.oz + 23), new THREE.Vector3(ctx.ox + 36, this.heightAt(ctx.ox + 36, ctx.oz - 18) + 1.8, ctx.oz - 18), 0xffd36e);
+    this.addRail(ctx, new THREE.Vector3(ctx.ox - 36, this.heightAt(ctx.ox - 36, ctx.oz + 23) + 0.6, ctx.oz + 23), new THREE.Vector3(ctx.ox + 36, this.heightAt(ctx.ox + 36, ctx.oz - 18) + 2.0, ctx.oz - 18), 0xffd36e);
+    if (ctx.rng() > 0.4) this.addRail(ctx, new THREE.Vector3(ctx.ox + 30, this.heightAt(ctx.ox + 30, ctx.oz + 30) + 0.6, ctx.oz + 30), new THREE.Vector3(ctx.ox - 30, this.heightAt(ctx.ox - 30, ctx.oz - 30) + 1.6, ctx.oz - 30), 0x62f7ff);
   }
   genForest(ctx) {
     for (let i = 0; i < 34; i++) this.addTree(ctx, randCell(ctx.rng), randCell(ctx.rng), randRangeR(ctx.rng, 0.8, 1.9));
@@ -912,6 +912,7 @@ class ChunkManager {
     for (let i = 0; i < 8; i++) this.addCrystal(ctx, randCell(ctx.rng), randCell(ctx.rng), 0x75ffb1, randRangeR(ctx.rng, 0.4, 0.9));
     for (let i = 0; i < 3; i++) if (ctx.rng() > 0.45) this.addPod(ctx, randCell(ctx.rng), randCell(ctx.rng), 0x75ffb1);
     if (ctx.rng() > 0.55) this.addWater(ctx, randRangeR(ctx.rng, -24, 24), randRangeR(ctx.rng, -24, 24), randRangeR(ctx.rng, 9, 18));
+    if (ctx.rng() > 0.4) this.addRail(ctx, new THREE.Vector3(ctx.ox - 34, this.heightAt(ctx.ox - 34, ctx.oz + 20) + 0.6, ctx.oz + 20), new THREE.Vector3(ctx.ox + 34, this.heightAt(ctx.ox + 34, ctx.oz - 20) + 1.8, ctx.oz - 20), 0x75ffb1);
   }
   genDesert(ctx) {
     if (ctx.rng() > 0.22) {
@@ -925,13 +926,14 @@ class ChunkManager {
       const lx = randCell(ctx.rng), lz = randCell(ctx.rng), y = this.heightAt(ctx.ox + lx, ctx.oz + lz) + 4;
       ctx.addMesh(this.geos.torus, this.mats.gold, lx, y, lz, 8, 8, 8, ctx.rng() * TAU, Math.PI / 2);
     }
+    if (ctx.rng() > 0.45) this.addRail(ctx, new THREE.Vector3(ctx.ox - 38, this.heightAt(ctx.ox - 38, ctx.oz - 20) + 0.6, ctx.oz - 20), new THREE.Vector3(ctx.ox + 38, this.heightAt(ctx.ox + 38, ctx.oz + 20) + 1.8, ctx.oz + 20), 0xffd36e);
   }
   genSnow(ctx) {
     for (let i = 0; i < 22; i++) this.addPine(ctx, randCell(ctx.rng), randCell(ctx.rng), randRangeR(ctx.rng, 0.9, 1.8));
     for (let i = 0; i < 12; i++) this.addRock(ctx, randCell(ctx.rng), randCell(ctx.rng), randRangeR(ctx.rng, 1.2, 3.6));
     for (let i = 0; i < 7; i++) this.addCrystal(ctx, randCell(ctx.rng), randCell(ctx.rng), 0xbbe9ff, randRangeR(ctx.rng, 0.5, 1.0));
     for (let i = 0; i < 2; i++) if (ctx.rng() > 0.5) this.addPod(ctx, randCell(ctx.rng), randCell(ctx.rng), 0x62f7ff);
-    if (ctx.rng() > 0.5) this.addRail(ctx, new THREE.Vector3(ctx.ox - 40, this.heightAt(ctx.ox - 40, ctx.oz - 26) + 2.5, ctx.oz - 26), new THREE.Vector3(ctx.ox + 40, this.heightAt(ctx.ox + 40, ctx.oz + 26) + 5, ctx.oz + 26), 0xbbe9ff);
+    this.addRail(ctx, new THREE.Vector3(ctx.ox - 40, this.heightAt(ctx.ox - 40, ctx.oz - 26) + 0.6, ctx.oz - 26), new THREE.Vector3(ctx.ox + 40, this.heightAt(ctx.ox + 40, ctx.oz + 26) + 2.4, ctx.oz + 26), 0xbbe9ff);
   }
   genCoast(ctx) {
     this.addWater(ctx, 0, 18, 34, true);
@@ -939,6 +941,7 @@ class ChunkManager {
     for (let i = 0; i < 10; i++) this.addRock(ctx, randCell(ctx.rng), randCell(ctx.rng), randRangeR(ctx.rng, 0.7, 2));
     for (let i = 0; i < 6; i++) this.addCrystal(ctx, randCell(ctx.rng), randCell(ctx.rng), 0x62f7ff, randRangeR(ctx.rng, 0.4, 0.9));
     for (let i = 0; i < 2; i++) if (ctx.rng() > 0.5) this.addPod(ctx, randCell(ctx.rng), randCell(ctx.rng), 0x62f7ff);
+    if (ctx.rng() > 0.45) this.addRail(ctx, new THREE.Vector3(ctx.ox - 36, this.heightAt(ctx.ox - 36, ctx.oz - 24) + 0.6, ctx.oz - 24), new THREE.Vector3(ctx.ox + 36, this.heightAt(ctx.ox + 36, ctx.oz + 24) + 2.0, ctx.oz + 24), 0x62f7ff);
   }
   addTree(ctx, lx, lz, s = 1) {
     const y = this.heightAt(ctx.ox + lx, ctx.oz + lz);
@@ -1046,21 +1049,21 @@ class ChunkManager {
     this.addCrystal(ctx, 5, 39, 0x62f7ff, 0.85);
     this.addCrystal(ctx, 0, 47, 0xff4fd8, 0.95);
     this.addHomeAt(ctx, 0, 60, 99);
-    const h1 = this.heightAt(ctx.ox - 18, ctx.oz + 18) + 1.3;
-    const h2 = this.heightAt(ctx.ox + 28, ctx.oz + 54) + 2.0;
+    const h1 = this.heightAt(ctx.ox - 18, ctx.oz + 18) + 0.5; // first rail the player meets — trivially steppable
+    const h2 = this.heightAt(ctx.ox + 28, ctx.oz + 54) + 1.6;
     this.addRail(ctx, new THREE.Vector3(ctx.ox - 18, h1, ctx.oz + 18), new THREE.Vector3(ctx.ox + 28, h2, ctx.oz + 54), 0xffd36e);
   }
   addRail(ctx, start, end, color = 0x62f7ff) {
     const localStart = start.clone().sub(new THREE.Vector3(ctx.ox, 0, ctx.oz));
     const localEnd = end.clone().sub(new THREE.Vector3(ctx.ox, 0, ctx.oz));
     const mid = localStart.clone().add(localEnd).multiplyScalar(0.5);
-    mid.y += 6 + ctx.rng() * 8;
+    mid.y += 0.8 + ctx.rng() * 0.8; // gentle arch (was +6..14, which put the whole rail out of jump reach)
     const curve = new THREE.CatmullRomCurve3([localStart, mid, localEnd]);
-    const geo = new THREE.TubeGeometry(curve, 28, 0.12, 8, false); geo.userData.disposable = true;
+    const geo = new THREE.TubeGeometry(curve, 28, 0.18, 6, false); geo.userData.disposable = true; // chunkier so a low rail still reads as grindable
     const mat = color === 0xffd36e ? this.mats.gold : color === 0xff4fd8 ? this.mats.pink : this.mats.cyan;
     const mesh = new THREE.Mesh(geo, mat); mesh.userData.disposable = true; ctx.group.add(mesh);
     const worldMid = mid.clone().add(new THREE.Vector3(ctx.ox, 0, ctx.oz));
-    ctx.rails.push({ start: start.clone(), end: end.clone(), points: [start.clone(), worldMid, end.clone()], color, radius: 7.2 });
+    ctx.rails.push({ start: start.clone(), end: end.clone(), points: [start.clone(), worldMid, end.clone()], color, radius: 11 });
   }
   collectSolids(x, z, out) {
     out.length = 0;
@@ -1121,12 +1124,12 @@ class Game {
     this.setLoad(0.1, 'opening WebGL…');
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !IS_TOUCH, powerPreference: 'high-performance' });
     this.renderer.setClearColor(0x080713, 1);
-    this.renderer.shadowMap.enabled = this.quality !== 'low';
+    this.renderer.shadowMap.enabled = this.quality === 'high'; // medium had a shadow pass with almost no casters — pure cost
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.08;
-    this.camera = new THREE.PerspectiveCamera(IS_TOUCH ? 78 : 73, innerWidth / innerHeight, 0.04, this.quality === 'low' ? 520 : 820);
+    this.camera = new THREE.PerspectiveCamera(IS_TOUCH ? 78 : 73, innerWidth / innerHeight, 0.04, this.quality === 'high' ? 820 : 520);
     this.player = new Player(this.camera);
     this.input = new InputState(this.player);
     this.setLoad(0.24, 'mixing sky colors…');
@@ -1134,7 +1137,7 @@ class Game {
     this.scene.background = new THREE.Color(0x080713);
     this.scene.fog = new THREE.FogExp2(0x131225, 0.0042);
     const hemi = new THREE.HemisphereLight(0xdfeeff, 0x271827, 1.65); this.scene.add(hemi);
-    this.sun = new THREE.DirectionalLight(0xffdfbb, 3.0); this.sun.position.set(80, 120, 40); this.sun.castShadow = this.quality !== 'low';
+    this.sun = new THREE.DirectionalLight(0xffdfbb, 3.0); this.sun.position.set(80, 120, 40); this.sun.castShadow = this.quality === 'high';
     this.sun.shadow.mapSize.set(this.quality === 'high' ? 768 : 512, this.quality === 'high' ? 768 : 512); this.sun.shadow.camera.near = 1; this.sun.shadow.camera.far = 360; this.sun.shadow.camera.left = -120; this.sun.shadow.camera.right = 120; this.sun.shadow.camera.top = 120; this.sun.shadow.camera.bottom = -120; this.scene.add(this.sun);
     this.setLoad(0.42, 'folding roads into meadows…');
     this.world = new ChunkManager(this.scene, this.player, this.quality);
@@ -1182,6 +1185,7 @@ class Game {
     // muzzle flash sprite that lives just in front of the camera
     const mfMat = new THREE.SpriteMaterial({ color: 0xaff7ff, transparent: true, opacity: 0, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending });
     this.muzzleFlash = new THREE.Sprite(mfMat); this.muzzleFlash.scale.set(0.5, 0.5, 0.5); this.muzzleFlash.renderOrder = 999; this.scene.add(this.muzzleFlash); this.muzzleT = 0;
+    this.enemyDarkMat = new THREE.MeshStandardMaterial({ color: 0x0b0812, roughness: 0.7, metalness: 0.2 }); // shared eye material — was re-created every enemy spawn
     this.projectileGeo = new THREE.SphereGeometry(0.18, 10, 6);
     this.enemyProjectileGeo = new THREE.SphereGeometry(0.22, 10, 6);
     this.projectileMat = new THREE.MeshStandardMaterial({ color: 0x9afcff, emissive: 0x62f7ff, emissiveIntensity: 1.8, roughness: 0.25 });
@@ -1242,17 +1246,20 @@ class Game {
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(pass);
     if (this.quality !== 'low') {
-      this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), this.quality === 'high' ? 0.54 : 0.34, 0.68, 0.34);
+      // medium runs bloom at half resolution (~1/4 the fill cost) so the neon glow stays without the full-res hit
+      const bs = this.quality === 'high' ? 1 : 0.5;
+      this.bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth * bs, innerHeight * bs), this.quality === 'high' ? 0.54 : 0.34, 0.68, 0.34);
       this.composer.addPass(this.bloom);
     }
     this.composer.addPass(new OutputPass());
   }
   resize() {
-    const dpr = Math.min(devicePixelRatio || 1, this.quality === 'high' ? 1.25 : this.quality === 'medium' ? 1.0 : 0.82);
+    const dpr = Math.min(devicePixelRatio || 1, this.quality === 'high' ? 1.25 : this.quality === 'medium' ? 0.9 : 0.82);
     this.renderer.setPixelRatio(dpr); this.renderer.setSize(innerWidth, innerHeight, false);
     this.camera.aspect = innerWidth / innerHeight; this.camera.updateProjectionMatrix();
     this.composer?.setSize(innerWidth, innerHeight);
-    this.bloom?.setSize(innerWidth, innerHeight);
+    const bs = this.quality === 'high' ? 1 : 0.5;
+    this.bloom?.setSize(innerWidth * bs, innerHeight * bs);
   }
   setQualityButtons() {
     document.querySelectorAll('[data-quality]').forEach(btn => {
@@ -1265,7 +1272,7 @@ class Game {
       });
     });
   }
-  updateSaveChip() { saveChip.textContent = save.runs ? `best ${formatMeters(save.best)} · ${save.discoveries || 0} wonders` : 'new atlas'; }
+  updateSaveChip() { saveChip.textContent = save.runs ? `best ${formatMeters(save.best)} · ${save.discoveries || 0} wonders` : 'new run'; }
   startRun() {
     this.audio.start();
     this.mode = 'play'; setScreen(null); hide(startEl); show(hudEl); if (IS_TOUCH) show(touchEl);
@@ -1282,7 +1289,7 @@ class Game {
     requestPointerLockSafe();
   }
   clearActors() {
-    for (const e of this.enemies) { if (e.mesh) { this.scene.remove(e.mesh); e.mat?.dispose?.(); e.mesh.traverse?.(o => { if (o.material && o.material !== e.mat) o.material.dispose?.(); }); } if (e.bar) this.scene.remove(e.bar); }
+    for (const e of this.enemies) { if (e.mesh) { this.scene.remove(e.mesh); e.mat?.dispose?.(); e.mesh.traverse?.(o => { if (o.material && o.material !== e.mat && o.material !== this.enemyDarkMat) o.material.dispose?.(); }); } if (e.bar) this.scene.remove(e.bar); }
     for (const arr of [this.projectiles, this.enemyProjectiles, this.pickups]) for (const o of arr) if (o.mesh) this.scene.remove(o.mesh);
     this.projectiles.length = this.enemyProjectiles.length = this.enemies.length = this.pickups.length = 0;
     this.input.shoot = this.input.slash = false; this.input.fireQueued = this.input.slashQueued = this.input.dashQueued = this.input.jumpQueued = this.input.surgeQueued = this.input.interactQueued = 0;
@@ -1345,7 +1352,7 @@ class Game {
     this.scene.fog.color.lerp(info._fogColor, dt * 1.2);
     this.scene.background.lerp(info._skyColor, dt * 0.9);
     const dist = Math.hypot(this.player.pos.x, this.player.pos.z);
-    this.scene.fog.density = lerp(this.scene.fog.density, clamp(0.0042 - this.player.viewBonus * 0.000006 + dist * 0.00000055, 0.0018, 0.0075), dt * 0.7);
+    this.scene.fog.density = lerp(this.scene.fog.density, clamp(0.0042 - this.player.viewBonus * 0.000006 + dist * 0.00000055, this.quality === 'high' ? 0.0018 : 0.0034, 0.0075), dt * 0.7);
     const sunA = this.clock * 0.025 + dist * 0.0007;
     this.sun.position.set(Math.cos(sunA) * 120, 90 + Math.sin(sunA * 0.47) * 30, Math.sin(sunA) * 120);
     this.audio.update(b, Math.hypot(this.player.vel.x, this.player.vel.z), dt);
@@ -1415,7 +1422,7 @@ class Game {
       }
     }
     if (best) {
-      const radius = best.radius || 6.8;
+      const radius = best.radius || 11;
       if (bestD < radius) {
         const near = 1 - bestD / radius;
         const look = this.player.lookVector(this._railLook ||= new THREE.Vector3());
@@ -1425,7 +1432,12 @@ class Game {
         const center = (this._railCenter ||= new THREE.Vector3()).copy(bestPoint).sub(this.player.pos);
         if (center.lengthSq() > 0.0001) this.player.vel.addScaledVector(center.normalize(), (10 + this.player.railPull * 0.35) * near * dt);
         this.player.vel.addScaledVector(bestDir, along * pull * dt);
-        this.player.vel.y += (bestPoint.y - this.player.pos.y) * dt * (2.2 + near * 2.6);
+        // strong vertical snap so the rail actually lifts you on (beats gravity), and a gentle
+        // assist-up when you're just below it so you can hop on from underneath
+        const railDy = bestPoint.y - this.player.pos.y;
+        this.player.vel.y += railDy * dt * (9 + near * 8);
+        if (railDy > 0 && this.player.vel.y < 0) this.player.vel.y *= 0.4;
+        if (railDy > 0.1) this.player.vel.y += (4 + near * 4) * dt;
         if (Math.random() < dt * (16 + near * 18)) this.particles.spawn((this._railFx ||= new THREE.Vector3()).set(this.player.pos.x, this.player.pos.y + 1.2, this.player.pos.z), best.color, 2, 0.45, bestDir);
       }
     }
@@ -1553,7 +1565,7 @@ class Game {
     const group = new THREE.Group();
     const color = type === 'brute' ? 0xff725d : type === 'sentinel' ? info.accent : type === 'duelist' ? 0xff4fd8 : 0xffffff;
     const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: type === 'mote' ? 0.9 : 1.35, roughness: 0.36, metalness: 0.05 });
-    const dark = new THREE.MeshStandardMaterial({ color: 0x0b0812, roughness: 0.7, metalness: 0.2 });
+    const dark = this.enemyDarkMat; // shared (the per-enemy animated material is `mat`, kept per-instance)
     const body = new THREE.Mesh(type === 'brute' ? this.enemyGeos.brute : this.enemyGeos.body, mat); group.add(body);
     if (type === 'sentinel') { const ring = new THREE.Mesh(this.enemyGeos.ring, mat); ring.rotation.x = Math.PI / 2; group.add(ring); group.userData.ring = ring; }
     if (type === 'duelist') { const blade = new THREE.Mesh(this.enemyGeos.blade, mat); blade.position.set(0.85, 0, 0); blade.rotation.z = 0.6; group.add(blade); }
@@ -1625,7 +1637,7 @@ class Game {
       if (e.pos.distanceTo(p.pos) > 180) e.dead = true;
     }
     for (let i = this.enemies.length - 1; i >= 0; i--) {
-      if (this.enemies[i].dead) { const e = this.enemies[i]; this.scene.remove(e.mesh); e.mat?.dispose?.(); e.mesh.traverse?.(o => { if (o.material && o.material !== e.mat) o.material.dispose?.(); }); if (e.bar) this.scene.remove(e.bar); this.enemies.splice(i, 1); }
+      if (this.enemies[i].dead) { const e = this.enemies[i]; this.scene.remove(e.mesh); e.mat?.dispose?.(); e.mesh.traverse?.(o => { if (o.material && o.material !== e.mat && o.material !== this.enemyDarkMat) o.material.dispose?.(); }); if (e.bar) this.scene.remove(e.bar); this.enemies.splice(i, 1); }
     }
   }
   updateProjectiles(dt) {
@@ -1655,6 +1667,18 @@ class Game {
             const dx = d.pos.x - b.mesh.position.x, dy = d.pos.y - b.mesh.position.y, dz = d.pos.z - b.mesh.position.z;
             const rr = d.radius + b.radius;
             if (dx * dx + dy * dy + dz * dz < rr * rr) { this.damageDestructible(d, b.damage, b.mesh.position); b.life = 0; break; }
+          }
+          // your shots can knock incoming enemy bolts out of the air
+          if (b.life > 0) for (const eb of this.enemyProjectiles) {
+            if (eb.life <= 0) continue;
+            const dx = eb.mesh.position.x - b.mesh.position.x, dy = eb.mesh.position.y - b.mesh.position.y, dz = eb.mesh.position.z - b.mesh.position.z;
+            const rr = eb.radius + b.radius;
+            if (dx * dx + dy * dy + dz * dz < rr * rr) {
+              eb.life = 0; b.life = 0;
+              this.particles.spawn(eb.mesh.position, 0xff5672, 12, 0.7);
+              this.particles.spawn(eb.mesh.position, 0xffffff, 6, 0.5);
+              break;
+            }
           }
         }
       }

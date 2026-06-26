@@ -13,14 +13,14 @@ contains every public game, including the two newest:
 | --- | --- |
 | `site/` | The qualiacology.com static site: homepage (`index.html`), the book, and the games below. Netlify-style `_redirects` / `_headers` / `sitemap.xml` live at its root. **Publish this folder's contents.** |
 | `site/no-moon/`, `site/rocket-shoes/`, `site/marrow/` | Featured games, linked from the homepage. |
-| `site/afterlight/` | **Afterlight Atlas** — endless Three.js 3D explorer/combat. Linked from the homepage and routed (`/afterlight/`). |
+| `site/starstruck/` | **Starstruck** — endless Three.js 3D explorer/combat. Linked from the homepage and routed (`/starstruck/`). |
 | `site/neon-breach/` | **Neon Breach** — Three.js FPS (Quake-style movement, grind-rails, game-feel). Linked from the homepage and routed (`/neon-breach/`). |
 | `site/glide/`, `site/luma/`, `site/dispensary/`, `site/banana/` | The smaller toys, linked from the homepage. |
 | `neon-daggers/` (repo root, **outside `site/`**) | **Neon Daggers** — parked/frozen idea bank (minified bundle, no source). Intentionally **not** part of the site. See its README. |
 
 To add a game to the site: drop its folder under `site/`, add a card on the homepage, and
 add a `/folder/` route to `site/_redirects` + a `<loc>` to `site/sitemap.xml` (that is
-exactly how Afterlight and Neon Breach were wired in).
+exactly how Starstruck and Neon Breach were wired in).
 
 ## Names overlap on purpose
 
@@ -38,7 +38,7 @@ prefix.
 The games use ES modules, so serve over HTTP rather than opening `index.html` from disk:
 
 ```bash
-cd site            # serves the whole site incl. /afterlight/ and /neon-breach/
+cd site            # serves the whole site incl. /starstruck/ and /neon-breach/
 python3 -m http.server 8765
 # then open http://localhost:8765/   (neon-daggers/ is separate: cd neon-daggers)
 ```

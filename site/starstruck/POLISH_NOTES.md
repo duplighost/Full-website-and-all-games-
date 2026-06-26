@@ -1,4 +1,4 @@
-# Afterlight Atlas — polish pass
+# Starstruck — polish pass
 
 ## Intuition / first-run clarity
 - Added a deliberate starter garden directly in the player's opening sightline: glowing pod, breakable crystals, a sanctuary house, and a visible rail.

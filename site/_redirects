@@ -41,11 +41,15 @@
 /horror             /marrow/                  302
 /the-house          /marrow/                  302
 
-# --- Afterlight Atlas ---
-/afterlight         /afterlight/index.html    301!
-/afterlight.html    /afterlight/              301!
-/afterlight-atlas   /afterlight/              302
-/atlas              /afterlight/              302
+# --- Starstruck (formerly Afterlight Atlas) ---
+/starstruck         /starstruck/index.html    301!
+/starstruck.html    /starstruck/              301!
+/atlas              /starstruck/              302
+# keep old Afterlight links working
+/afterlight         /starstruck/              301!
+/afterlight/*       /starstruck/:splat        301!
+/afterlight.html    /starstruck/              301!
+/afterlight-atlas   /starstruck/              302
 
 # --- Neon Breach ---
 /neon-breach        /neon-breach/index.html   301!

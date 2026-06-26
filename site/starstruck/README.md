@@ -1,4 +1,4 @@
-# Afterlight Atlas
+# Starstruck
 
 A self-contained Three.js browser game built for Qualiacology: endless procedural 3D exploration/combat with luminous city districts, warm houses, forests, deserts/oases, snow ranges, mountain vistas, rail-line movement, enemies, pickups, upgrade choices, and realization cards.
 
@@ -7,7 +7,7 @@ A self-contained Three.js browser game built for Qualiacology: endless procedura
 Because this uses ES modules, run it from a local web server instead of opening `index.html` directly:
 
 ```bash
-cd afterlight
+cd starstruck
 python3 -m http.server 8765
 ```
 
@@ -30,6 +30,6 @@ Destructibles: crystals, small rocks, and glowing lumen pods can be shot, slashe
 ## Deploy
 
 The folder is static and is already integrated into the Qualiacology site: it lives at
-`site/afterlight/`, is linked from the homepage's Featured Games, and is routed via
-`site/_redirects` (`/afterlight`) and `site/sitemap.xml`. Deploying the `site/` folder ships
-it at `/afterlight/`.
+`site/starstruck/`, is linked from the homepage's Featured Games, and is routed via
+`site/_redirects` (`/starstruck`) and `site/sitemap.xml`. Deploying the `site/` folder ships
+it at `/starstruck/`.

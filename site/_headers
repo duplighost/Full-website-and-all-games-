@@ -90,13 +90,13 @@
 /marrow/assets/*
   Cache-Control: public, max-age=31536000, immutable
 
-/afterlight/index.html
+/starstruck/index.html
   Cache-Control: no-store, no-cache, must-revalidate, max-age=0
 
-/afterlight/src/*
+/starstruck/src/*
   Cache-Control: public, max-age=0, must-revalidate
 
-/afterlight/vendor/*
+/starstruck/vendor/*
   Cache-Control: public, max-age=31536000, immutable
 
 /neon-breach/index.html
