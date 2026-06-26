@@ -382,7 +382,8 @@ class Game {
 
 window.addEventListener('DOMContentLoaded', () => {
   try {
-    window.__game = new Game(); // exposed for debugging / automated smoke tests
+    const g = new Game(); // its rAF loop keeps it alive; no global needed for normal play
+    if (new URLSearchParams(location.search).has('debug')) window.__game = g; // debug/smoke handle, opt-in only
   } catch (err) {
     console.error(err);
     const o = document.getElementById('hud');

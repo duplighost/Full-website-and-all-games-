@@ -7,6 +7,13 @@ import * as THREE from 'three';
 import { clamp, clamp01, damp, rand, randInt, pick, lerp } from '../engine/math.js';
 
 const WHITE = new THREE.Color(0xffffff); // reused for hit-flash tint (no per-frame alloc)
+// Scratch vectors reused inside Enemy.update so steering doesn't allocate ~4 Vector3 per
+// enemy per frame (the project's biggest GC source). update() is called sequentially per
+// enemy and fully consumes these before the next call, so a single shared set is safe.
+const _toPlayer = new THREE.Vector3();
+const _dir = new THREE.Vector3();
+const _desired = new THREE.Vector3();
+const _strafe = new THREE.Vector3();
 
 const GRUNT_WINDUP = 0.26;     // telegraph before a grunt's melee strike lands
 
@@ -175,10 +182,10 @@ export class Enemy {
     }
 
     const def = this.def;
-    const toPlayer = new THREE.Vector3().subVectors(player.pos, this.pos);
+    const toPlayer = _toPlayer.subVectors(player.pos, this.pos);
     toPlayer.y = 0;
     const dist = toPlayer.length();
-    const dir = dist > 0.001 ? toPlayer.clone().multiplyScalar(1 / dist) : new THREE.Vector3(0, 0, 1);
+    const dir = dist > 0.001 ? _dir.copy(toPlayer).multiplyScalar(1 / dist) : _dir.set(0, 0, 1);
 
     // face the player smoothly
     const targetFacing = Math.atan2(dir.x, dir.z);
@@ -186,14 +193,14 @@ export class Enemy {
     this.group.rotation.y = this.facing;
 
     // desired velocity
-    const desired = new THREE.Vector3();
+    const desired = _desired.set(0, 0, 0);
     if (def.type === 'grunt') {
       if (dist > def.attackRange * 0.8) desired.addScaledVector(dir, this.speed);
     } else {
       // shooter: hold preferred range
       if (dist > def.preferredDist + 2) desired.addScaledVector(dir, this.speed);
       else if (dist < def.preferredDist - 2) desired.addScaledVector(dir, -this.speed);
-      else desired.addScaledVector(new THREE.Vector3(-dir.z, 0, dir.x), this.speed * 0.5 * (Math.sin(this.bob * 0.5) >= 0 ? 1 : -1)); // weaving strafe
+      else desired.addScaledVector(_strafe.set(-dir.z, 0, dir.x), this.speed * 0.5 * (Math.sin(this.bob * 0.5) >= 0 ? 1 : -1)); // weaving strafe
     }
 
     // separation from other enemies
