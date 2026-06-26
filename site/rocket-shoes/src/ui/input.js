@@ -236,11 +236,12 @@ export function getAim() {
     if (n.m > 8) { ax = n.x; ay = n.y; aiming = true; }
     firing = mouse.down;
   }
-  // Gamepad right stick only takes over when nothing else is actively aiming this frame,
-  // so a connected controller resting just past the deadzone (stick drift) can't hijack
-  // mouse/touch aim and force-fire the wrong way. Deadzone raised 0.2 -> 0.28 to reject drift.
+  // Gamepad right stick takes over unless the mouse button is held or a touch-aim is active
+  // (so it doesn't fight an input you're actively using). It is NOT gated on the `aiming`
+  // flag — that latches true forever once the mouse has moved (mouse.seen), which would
+  // permanently disable stick aim. Deadzone raised 0.2 -> 0.28 to reject stick drift.
   const gp = (typeof navigator !== 'undefined' && navigator.getGamepads) ? navigator.getGamepads()[0] : null;
-  if (gp && !aiming) {
+  if (gp && !mouse.down && aimTouch.id === null) {
     const rx = Math.abs(gp.axes[2] || 0) > 0.28 ? gp.axes[2] : 0;
     const ry = Math.abs(gp.axes[3] || 0) > 0.28 ? gp.axes[3] : 0;
     if (rx || ry) {

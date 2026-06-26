@@ -8,6 +8,17 @@ import { damageEnemy, hurtPlayer } from './combat.js';
 import { damageObstacle } from './breakables.js';
 import { hooks } from './items.js';
 
+// Drawn height for a bullet at (x,y) on a given level — the roof height it was fired from,
+// frozen so the bolt holds its plane across building edges instead of sampling the tier it
+// happens to be flying over. Level-0 (street) bullets get 0.
+function bulletLift(room, x, y, level) {
+  if ((level || 0) <= 0 || !room.tiers) return 0;
+  for (const t of room.tiers) {
+    if (x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h) return TIER_LIFT * (t.rise || 1);
+  }
+  return TIER_LIFT; // fired just off a ledge → still hold a roof height, never snap to street
+}
+
 export function spawnBullet(room, owner, x, y, vx, vy, r, damage, life, color, opts = {}) {
   const cap = owner === 'enemy'
     ? (view.mobile ? CAPS.ENEMY_BULLETS.mobile : CAPS.ENEMY_BULLETS.desktop)
@@ -17,17 +28,9 @@ export function spawnBullet(room, owner, x, y, vx, vy, r, damage, life, color, o
   if (count > cap) return null;
   const b = { owner, x, y, vx, vy, r, damage, life, max: life, color,
     pierce: opts.pierce || 0, bounces: opts.bounces || 0, level: opts.level || 0, hitIds: null, ...opts };
-  // Freeze the bullet's drawn height at its muzzle's roof height. drawBullets used to
-  // sample the tier under the bullet's current position, so a rooftop bolt snapped down
-  // to the street the instant it left its building's footprint — a vertical teleport.
-  let liftPx = 0;
-  if ((b.level || 0) > 0 && room.tiers) {
-    for (const t of room.tiers) {
-      if (x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h) { liftPx = TIER_LIFT * (t.rise || 1); break; }
-    }
-    if (!liftPx) liftPx = TIER_LIFT; // fired just off the ledge → still hold a roof height, never snap to street
-  }
-  b.liftPx = liftPx;
+  // Freeze the bullet's drawn height at its muzzle's roof height so it doesn't teleport
+  // vertically across building edges (drawBullets used to sample the tier under it).
+  b.liftPx = bulletLift(room, x, y, b.level);
   if (owner === 'player') hooks.run('onBulletSpawn', b);
   room.bullets.push(b);
   return b;
@@ -80,6 +83,7 @@ function convertBullet(room, b, p) {
   b.pierce = 0; b.bounces = 0; b.hitIds = null; b.turn = 0;
   b.life = Math.max(b.life, 0.6);
   b.level = p.level;
+  b.liftPx = bulletLift(room, b.x, b.y, b.level); // re-sync drawn height to the new (player) level, or it floats at the old roof height
   particle(room, b.x, b.y, '#ffffff', 0, 0, 0.16, 4);
 }
 

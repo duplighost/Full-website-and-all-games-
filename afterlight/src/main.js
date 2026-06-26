@@ -745,11 +745,12 @@ class ChunkManager {
     if (Math.abs(w) > 0.62 && r > 220) b = w > 0 ? 'city' : 'forest';
     return b;
   }
-  heightAt(x, z, biomeHint) {
-    // biomeHint lets callers that already know the chunk's biome skip the biomeAt() fbm
-    // recompute — addTerrain calls this once per vertex (169-289x/chunk), so dropping that
-    // extra 3-octave noise per call is a large chunk-build saving.
-    const b = biomeHint || this.biomeAt(x, z);
+  heightAt(x, z) {
+    // Per-point biome is required: it keeps terrain continuous across chunk edges and keeps
+    // the rendered mesh height in lockstep with the player ground-snap and every decoration
+    // placement (all of which call heightAt per point). Do not pass a chunk-wide biome hint
+    // here — it desyncs the terrain from where things actually sit at biome boundaries.
+    const b = this.biomeAt(x, z);
     const n = fbm(x * 0.013, z * 0.013, 5);
     const n2 = fbm(x * 0.004 - 22, z * 0.004 + 9, 3);
     if (b === 'city') return Math.max(0, n * 0.8 + n2 * 0.6);
@@ -835,7 +836,7 @@ class ChunkManager {
         const lx = ix / div * CHUNK - CHUNK / 2;
         const lz = iz / div * CHUNK - CHUNK / 2;
         const wx = ox + lx, wz = oz + lz;
-        const h = this.heightAt(wx, wz, biome);
+        const h = this.heightAt(wx, wz);
         positions.push(lx, h, lz);
         const col = this.terrainColor(biome, h, wx, wz);
         colors.push(col.r, col.g, col.b);
@@ -878,7 +879,7 @@ class ChunkManager {
       const sx = randRangeR(rng, 8, 18), sz = randRangeR(rng, 8, 18), sy = randRangeR(rng, 12, 48) * (rng() > 0.88 ? 1.5 : 1);
       const mat = rng() > 0.5 ? this.mats.dark : this.mats.wall;
       this.addBoxDecor(ctx, mat, lx, lz, sx, sy, sz, 0, 0, true);
-      const wy = this.heightAt(ctx.ox + lx, ctx.oz + lz, 'city');
+      const wy = this.heightAt(ctx.ox + lx, ctx.oz + lz);
       // Cap windows per building: the old min(42, sy/2.6) made up to ~27 window meshes per
       // tower (~500/chunk), the single biggest contributor to the chunk-build freeze.
       for (let w = 0; w < Math.min(12, sy / 3.4); w++) {
