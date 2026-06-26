@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta name="description" content="Afterlight Atlas — an endless 3D exploration/combat world of cities, homes, deserts, oases, snow, mountains, upgrades, and realizations." />
+  <meta name="theme-color" content="#080713" />
+  <title>Afterlight Atlas</title>
+  <link rel="stylesheet" href="./style.css?v=20260626a" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/three.module.js",
+      "three/addons/": "./vendor/three/addons/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <a class="home-link" href="/" aria-label="Back to Qualiacology">← Qualiacology</a>
+  <canvas id="game"></canvas>
+
+  <div id="loading" class="screen active">
+    <div class="panel loading-panel">
+      <div class="sigil" aria-hidden="true"></div>
+      <p class="kicker">building an endless little impossible place</p>
+      <h1>Afterlight Atlas</h1>
+      <p class="lede">Move, shoot, break glow, enter warmth, keep going.</p>
+      <div class="bar"><div id="loadFill"></div></div>
+      <p id="loadText" class="tiny">warming the sky…</p>
+    </div>
+  </div>
+
+  <div id="start" class="screen hidden">
+    <div class="panel start-panel">
+      <div class="title-row">
+        <div>
+          <p class="kicker">first-person movement / combat / wonder theft</p>
+          <h1>Afterlight Atlas</h1>
+        </div>
+        <div class="save-chip" id="saveChip">new atlas</div>
+      </div>
+      <p class="lede">Follow glow. Break crystals. Enter houses. Choose upgrades. Keep moving.</p>
+      <div class="grid">
+        <div class="control-card">
+          <h2>Desktop</h2>
+          <p><b>WASD</b> move · <b>mouse</b> look · <b>click</b> shoot · <b>right click</b> slash · <b>Q</b> dash · <b>Space</b> jump/glide · <b>Shift</b> sprint · <b>E</b> interact · <b>F</b> surge</p>
+        </div>
+        <div class="control-card">
+          <h2>Phone</h2>
+          <p>Left thumb moves. Right thumb looks. Tap fires. Interact appears only near something useful.</p>
+        </div>
+      </div>
+      <div class="quality-row" id="qualityRow" aria-label="graphics quality">
+        <span>graphics</span>
+        <button type="button" data-quality="low">low</button>
+        <button type="button" data-quality="medium">medium</button>
+        <button type="button" data-quality="high" class="selected">high</button>
+      </div>
+      <div class="actions">
+        <button id="playBtn" class="primary" type="button">Enter the Atlas</button>
+        <button id="resetBtn" class="secondary" type="button">Reset save</button>
+      </div>
+      <p class="tiny">Click once to capture the mouse. Landscape helps on mobile.</p>
+    </div>
+  </div>
+
+  <div id="pause" class="screen hidden slim">
+    <div class="panel pause-panel">
+      <p class="kicker">paused</p>
+      <h1>The world keeps its mouth shut for a second.</h1>
+      <p id="pauseStats" class="lede"></p>
+      <div class="actions">
+        <button id="resumeBtn" class="primary" type="button">Resume</button>
+        <button id="backToStartBtn" class="secondary" type="button">Title</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="upgrade" class="screen hidden slim">
+    <div class="panel upgrade-panel">
+      <p class="kicker">realization found</p>
+      <h1 id="upgradeTitle">Choose what the world teaches you.</h1>
+      <p id="upgradeText" class="lede"></p>
+      <div id="upgradeCards" class="upgrade-cards"></div>
+    </div>
+  </div>
+
+  <div id="death" class="screen hidden slim">
+    <div class="panel pause-panel">
+      <p class="kicker">you got folded</p>
+      <h1>Not dead. Rewritten with worse punctuation.</h1>
+      <p id="deathStats" class="lede"></p>
+      <div class="actions">
+        <button id="retryBtn" class="primary" type="button">Run Again</button>
+        <button id="deathTitleBtn" class="secondary" type="button">Title</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="hud" class="hud hidden" aria-hidden="true">
+    <div id="crosshair" class="crosshair"><span class="ch-dot"></span><i class="ch-mark"></i></div>
+    <div class="top-left">
+      <div class="brand">AFTERLIGHT ATLAS</div>
+      <div class="meters">
+        <div class="meter health"><div id="hpGhost" class="ghost"></div><div id="hpFill"></div><span id="hpText">100</span></div>
+        <div class="meter energy"><div id="energyFill"></div><span id="energyText">100</span></div>
+      </div>
+      <div id="biomeReadout" class="readout">meadow</div>
+    </div>
+    <div class="top-right">
+      <div id="stats" class="stats"></div>
+      <div id="compass" class="compass"></div>
+    </div>
+    <div id="comboFlash" class="combo-flash"></div>
+    <div id="prompt" class="prompt"></div>
+    <div id="toast" class="toast"></div>
+    <div id="realizationLog" class="realization-log"></div>
+    <div id="dmgLayer" class="dmg-layer"></div>
+    <div id="dirDmg" class="dir-dmg"></div>
+    <div id="damageVignette" class="damage-vignette"></div>
+    <div id="lowHpVignette" class="lowhp-vignette"></div>
+    <div id="frameVignette" class="frame-vignette"></div>
+  </div>
+
+  <div id="touch" class="touch hidden" aria-hidden="true">
+    <div id="moveZone" class="ctrl-zone move-zone">
+      <div id="stickBase" class="stick-base hidden"><div class="stick-ring"></div><div id="stickKnob" class="stick-knob"></div></div>
+    </div>
+    <div id="lookZone" class="ctrl-zone look-zone"></div>
+    <button id="autofireChip" class="autofire-chip" type="button">AUTO‑AIM&nbsp;<b>ON</b></button>
+    <div class="touch-cluster">
+      <button id="touchShoot" class="touch-btn act-shoot big" type="button" aria-label="hold to fire"><span class="ic">&#9679;</span><label>fire</label></button>
+      <button id="touchSurge" class="touch-btn act-surge" type="button"><span class="ic">✦</span><label>surge</label></button>
+      <button id="touchSlash" class="touch-btn act-slash" type="button"><span class="ic">⚔</span><label>slash</label></button>
+      <button id="touchDash" class="touch-btn act-dash" type="button"><span class="ic">»</span><label>dash</label></button>
+      <button id="touchJump" class="touch-btn act-jump big" type="button"><span class="ic">⤒</span><label>jump</label></button>
+    </div>
+    <button id="touchInteract" class="touch-interact hidden" type="button"><span class="ic">✥</span><label id="touchInteractLabel">open</label></button>
+  </div>
+
+  <div id="webglError" class="screen hidden">
+    <div class="panel start-panel">
+      <p class="kicker">WebGL required</p>
+      <h1>Your browser refused to open the sky.</h1>
+      <p class="lede">Afterlight Atlas needs WebGL. Try a modern browser with hardware acceleration enabled.</p>
+    </div>
+  </div>
+
+  <script type="module" src="./src/main.js?v=20260626a"></script>
+</body>
+</html>
