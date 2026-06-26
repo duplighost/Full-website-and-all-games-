@@ -6,16 +6,21 @@ are reviewable as normal diffs.
 
 ## Layout
 
-| Folder | What it is | Deploy |
-| --- | --- | --- |
-| `site/` | The qualiacology.com static site: homepage, the book, and the games **No Moon**, **Rocket Shoes**, **Marrow**, **Glide**, **LUMA**, **The Dispensary**, **Banana**. Netlify-style `_redirects` / `_headers` / `sitemap.xml` live here. | Publish dir = `site/` |
-| `afterlight/` | **Afterlight Atlas** — standalone Three.js endless 3D explorer/combat game. | Static; serve the folder |
-| `neon-breach/` | **Neon Breach** — standalone Three.js FPS (Quake-style movement, grind-rails, game-feel focus). Editable modular source. | Static; serve the folder |
-| `neon-daggers/` | **Neon Daggers** — standalone 3D twin-stick survivor. **Parked / frozen** (minified bundle, no source). See its README. | Not linked; reference only |
+`site/` is the deployable — its whole contents are what you publish to Netlify. It now
+contains every public game, including the two newest:
 
-`afterlight/`, `neon-breach/`, and `neon-daggers/` are standalone and **not yet linked**
-from `site/`. Wire up a nav link + a route in `site/_redirects` when you want any of them
-public.
+| Path | What it is |
+| --- | --- |
+| `site/` | The qualiacology.com static site: homepage (`index.html`), the book, and the games below. Netlify-style `_redirects` / `_headers` / `sitemap.xml` live at its root. **Publish this folder's contents.** |
+| `site/no-moon/`, `site/rocket-shoes/`, `site/marrow/` | Featured games, linked from the homepage. |
+| `site/afterlight/` | **Afterlight Atlas** — endless Three.js 3D explorer/combat. Linked from the homepage and routed (`/afterlight/`). |
+| `site/neon-breach/` | **Neon Breach** — Three.js FPS (Quake-style movement, grind-rails, game-feel). Linked from the homepage and routed (`/neon-breach/`). |
+| `site/glide/`, `site/luma/`, `site/dispensary/`, `site/banana/` | The smaller toys, linked from the homepage. |
+| `neon-daggers/` (repo root, **outside `site/`**) | **Neon Daggers** — parked/frozen idea bank (minified bundle, no source). Intentionally **not** part of the site. See its README. |
+
+To add a game to the site: drop its folder under `site/`, add a card on the homepage, and
+add a `/folder/` route to `site/_redirects` + a `<loc>` to `site/sitemap.xml` (that is
+exactly how Afterlight and Neon Breach were wired in).
 
 ## Names overlap on purpose
 
@@ -33,9 +38,9 @@ prefix.
 The games use ES modules, so serve over HTTP rather than opening `index.html` from disk:
 
 ```bash
-cd site            # or afterlight / neon-breach / neon-daggers
+cd site            # serves the whole site incl. /afterlight/ and /neon-breach/
 python3 -m http.server 8765
-# then open http://localhost:8765/
+# then open http://localhost:8765/   (neon-daggers/ is separate: cd neon-daggers)
 ```
 
 ## Debug handles

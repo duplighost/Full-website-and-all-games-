@@ -29,4 +29,7 @@ Destructibles: crystals, small rocks, and glowing lumen pods can be shot, slashe
 
 ## Deploy
 
-The folder is static. Drop `afterlight/` into the site root and link to `/afterlight/`. (It is not yet linked from the main Qualiacology site — wire up a nav link + `/afterlight/` route when you want it public.)
+The folder is static and is already integrated into the Qualiacology site: it lives at
+`site/afterlight/`, is linked from the homepage's Featured Games, and is routed via
+`site/_redirects` (`/afterlight`) and `site/sitemap.xml`. Deploying the `site/` folder ships
+it at `/afterlight/`.

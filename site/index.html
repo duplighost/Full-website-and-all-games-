@@ -2256,6 +2256,34 @@
       text-shadow: 0 2px 12px rgba(0,0,0,0.55);
     }
 
+    .game-portal.afterlight-portal {
+      border: 1px solid rgba(117, 255, 177, 0.22);
+      box-shadow: 0 34px 100px rgba(0,0,0,0.62), 0 0 80px rgba(98, 247, 255, 0.10), inset 0 1px 0 rgba(255,255,255,0.06);
+      background: #05070d;
+    }
+    .game-portal.afterlight-portal::before {
+      background:
+        radial-gradient(circle at 30% 26%, rgba(117,255,177,0.20), transparent 30%),
+        radial-gradient(circle at 78% 22%, rgba(255,210,122,0.14), transparent 26%),
+        radial-gradient(circle at 60% 104%, rgba(98,247,255,0.16), transparent 38%),
+        linear-gradient(180deg, rgba(6,12,12,0.30), rgba(3,6,8,0.78));
+    }
+    .afterlight-portal .portal-kicker { color: #8effc0; text-shadow: 0 0 18px rgba(98,247,255,0.34); }
+
+    .game-portal.neon-breach-portal {
+      border: 1px solid rgba(180, 77, 255, 0.24);
+      box-shadow: 0 34px 100px rgba(0,0,0,0.62), 0 0 80px rgba(255, 79, 216, 0.10), inset 0 1px 0 rgba(255,255,255,0.06);
+      background: #06040c;
+    }
+    .game-portal.neon-breach-portal::before {
+      background:
+        radial-gradient(circle at 32% 28%, rgba(180,77,255,0.22), transparent 30%),
+        radial-gradient(circle at 76% 26%, rgba(98,247,255,0.16), transparent 26%),
+        radial-gradient(circle at 58% 104%, rgba(255,79,216,0.18), transparent 38%),
+        linear-gradient(180deg, rgba(8,6,16,0.32), rgba(4,3,9,0.80));
+    }
+    .neon-breach-portal .portal-kicker { color: #d7a6ff; text-shadow: 0 0 18px rgba(255,79,216,0.36); }
+
     .game-portal.marrow-portal {
       min-height: clamp(360px, 41vw, 510px);
       align-content: end;
@@ -2979,6 +3007,44 @@
               <div class="button-row portal-actions">
                 <a class="button cyan" href="/marrow/"><i class="fa-solid fa-ghost"></i> Enter Marrow</a>
                 <button class="ghost-button" type="button" data-copy-link="/marrow/"><i class="fa-solid fa-copy"></i> Copy Game Link</button>
+              </div>
+              <div class="copy-status" data-copy-status aria-live="polite"></div>
+            </article>
+
+            <article class="card cool game-portal afterlight-portal reveal" aria-labelledby="afterlight-portal-title">
+              <div class="portal-veil" aria-hidden="true"></div>
+              <p class="portal-kicker">New • endless neon explorer</p>
+              <h3 id="afterlight-portal-title">Afterlight Atlas</h3>
+              <p class="portal-copy">
+                Drift through an endless luminous world — neon city districts, warm houses, forests, desert oases and snow ranges — grinding light-rails, shattering crystals, and turning back waves while you chase the glow to the next horizon.
+              </p>
+              <div class="portal-pills" aria-label="Afterlight Atlas controls">
+                <span>Desktop: WASD + mouse</span>
+                <span>Mobile: twin-stick</span>
+                <span>Dash · slash · surge</span>
+              </div>
+              <div class="button-row portal-actions">
+                <a class="button cyan" href="/afterlight/"><i class="fa-solid fa-compass"></i> Explore Afterlight</a>
+                <button class="ghost-button" type="button" data-copy-link="/afterlight/"><i class="fa-solid fa-copy"></i> Copy Game Link</button>
+              </div>
+              <div class="copy-status" data-copy-status aria-live="polite"></div>
+            </article>
+
+            <article class="card cool game-portal neon-breach-portal reveal" aria-labelledby="neon-breach-portal-title">
+              <div class="portal-veil" aria-hidden="true"></div>
+              <p class="portal-kicker">New • movement-shooter FPS</p>
+              <h3 id="neon-breach-portal-title">Neon Breach</h3>
+              <p class="portal-copy">
+                A first-person arena shooter built around game feel: Quake-style strafe-jumping, magnetic grind-rails, crunchy recoil, hitstop and slow-mo kills. Hold the line against escalating waves and chase a flawless run.
+              </p>
+              <div class="portal-pills" aria-label="Neon Breach controls">
+                <span>Desktop: WASD + mouse</span>
+                <span>Click to aim</span>
+                <span>Grind the rails</span>
+              </div>
+              <div class="button-row portal-actions">
+                <a class="button cyan" href="/neon-breach/"><i class="fa-solid fa-crosshairs"></i> Breach In</a>
+                <button class="ghost-button" type="button" data-copy-link="/neon-breach/"><i class="fa-solid fa-copy"></i> Copy Game Link</button>
               </div>
               <div class="copy-status" data-copy-status aria-live="polite"></div>
             </article>

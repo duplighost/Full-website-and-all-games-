@@ -40,3 +40,15 @@
 /marrow.html        /marrow/                  301!
 /horror             /marrow/                  302
 /the-house          /marrow/                  302
+
+# --- Afterlight Atlas ---
+/afterlight         /afterlight/              301!
+/afterlight.html    /afterlight/              301!
+/afterlight-atlas   /afterlight/              302
+/atlas              /afterlight/              302
+
+# --- Neon Breach ---
+/neon-breach        /neon-breach/             301!
+/neon-breach.html   /neon-breach/             301!
+/neonbreach         /neon-breach/             302
+/fps                /neon-breach/             302

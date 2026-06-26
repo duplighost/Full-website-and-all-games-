@@ -90,6 +90,24 @@
 /marrow/assets/*
   Cache-Control: public, max-age=31536000, immutable
 
+/afterlight/index.html
+  Cache-Control: no-store, no-cache, must-revalidate, max-age=0
+
+/afterlight/src/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+/afterlight/vendor/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/neon-breach/index.html
+  Cache-Control: no-store, no-cache, must-revalidate, max-age=0
+
+/neon-breach/src/*
+  Cache-Control: public, max-age=0, must-revalidate
+
+/neon-breach/vendor/*
+  Cache-Control: public, max-age=31536000, immutable
+
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
