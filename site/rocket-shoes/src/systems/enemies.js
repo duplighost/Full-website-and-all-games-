@@ -11,7 +11,7 @@ import { hurtPlayer } from './combat.js';
 import { resolveCircleObstacle } from './player.js';
 import { ENEMY_TYPES } from '../data/enemies.js';
 import { sfx } from '../audio/sfx.js';
-import { levelAt } from './levels.js';
+import { levelAt, levelStable } from './levels.js';
 import { damageObstacle } from './breakables.js';
 
 // Charging enemies should make the room react: they pulverize soft cover, but never
@@ -223,7 +223,9 @@ export function updateEnemies(room, dt) {
       e.x = clamp(e.x, w + e.r, room.w - w - e.r);
       e.y = clamp(e.y, w + e.r, room.h - w - e.r);
       for (const o of room.obstacles) if (!o.gone) resolveCircleObstacle(e, o);
-      e.level = levelAt(room, e.x, e.y);
+      // Bosses are ground-locked arena fights (level 0) so their bullets/areas stay
+      // consistent; normal enemies resolve hysteretically so they don't flicker levels.
+      if (!e.boss) e.level = levelStable(room, e.x, e.y, e.r, e.level);
     }
 
     if (p.inv <= 0 && e.level === p.level && dist(e.x, e.y, p.x, p.y) < e.r + p.r + 2) {
@@ -389,6 +391,19 @@ function updateMinibossPattern(e, room, p, to, d, dt) {
         fireEnemyShot(room, e, Math.cos(a), Math.sin(a), 252 + idx * 8, 5.0, 3.5, e.color);
       }
       if (enraged) sfx('telegraph');
+      break;
+    }
+    case 'twinGap': { // TWO opposing safe gaps that slowly rotate — thread the moving lanes
+      e.patternCd = enraged ? 1.6 : 2.4;
+      const n = enraged ? 30 : 24, gap = enraged ? 0.42 : 0.6;
+      e.spiralA = (e.spiralA || 0) + 0.55; // the pair of gaps turns a little each volley
+      const angDist = (x) => { const o = ((x % TAU) + TAU) % TAU; return Math.min(o, TAU - o); };
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * TAU;
+        if (Math.min(angDist(a - e.spiralA), angDist(a - e.spiralA - Math.PI)) < gap) continue;
+        fireEnemyShot(room, e, Math.cos(a), Math.sin(a), 214 + idx * 8, 5.0, 3.7, e.color);
+      }
+      ripple(room, e.x, e.y, e.color, 120, 0.4); sfx('telegraph');
       break;
     }
     default: // chargeBurst

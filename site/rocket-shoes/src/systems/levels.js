@@ -12,6 +12,23 @@ export function levelAt(room, x, y) {
   return 0;
 }
 
+// Hysteretic level resolve: an entity only changes level when its whole footprint is
+// clearly over the new tier (centre + four edge samples agree). While it straddles a
+// ledge it keeps its previous level instead of flickering 0↔1 every frame — that
+// flicker was why chasing enemies "slipped between verticalities" and dropped out of
+// reach mid-fight. r ≈ entity radius, prev = its current level.
+export function levelStable(room, x, y, r, prev = 0) {
+  const tiers = room.tiers;
+  if (!tiers || tiers.length === 0) return 0;
+  const m = Math.max(6, (r || 0) * 0.7);
+  const c = levelAt(room, x, y);
+  if (c === levelAt(room, x - m, y) && c === levelAt(room, x + m, y) &&
+      c === levelAt(room, x, y - m) && c === levelAt(room, x, y + m)) {
+    return c;                 // solidly on one level → adopt it
+  }
+  return prev;                // straddling a boundary → hold the level we already had
+}
+
 // Ground surfaces (Moonless-inspired): non-colliding floor patches that change how the
 // boots feel. Returns the surface kind under a point on a given level, else null.
 //  slick — frictionless chrome/ice: you keep momentum and drift

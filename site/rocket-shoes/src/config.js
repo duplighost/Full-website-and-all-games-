@@ -31,7 +31,9 @@ export const PLAYER = {
   // Baseline shot homing — barely-there. Only a whisper of correction for an enemy
   // basically dead ahead and close; otherwise shots fly straight where aimed. The
   // hunterMycelia relic stacks on top for players who actually want tracking.
-  SHOT_HOMING_TURN: 0.12, SHOT_HOMING_RANGE: 230, SHOT_HOMING_CONE: 0.82,
+  // Tightened (cone 0.82->0.90, turn 0.12->0.07) so bullets hold the aimed line and
+  // don't visibly curve toward an off-axis enemy near the crosshair.
+  SHOT_HOMING_TURN: 0.07, SHOT_HOMING_RANGE: 230, SHOT_HOMING_CONE: 0.90,
   // Art-space gun offsets. firePlayer multiplies these by DRAW_SCALE so bullets leave the shrunken muzzle.
   EMITTER_Y: -16, EMITTER_LEN: 32,
   CRIT: 0.03, CRIT_MULT: 1.8,
@@ -42,7 +44,10 @@ export const PLAYER = {
   DASH_KILL_REFUND: 0.145,   // every kill feeds the dash loop a little
   // Slight aim-assist: when you dash with an enemy almost dead ahead, curve gently toward
   // it. Deliberately subtle — a small correction on a near-aligned dash, not a magnet.
-  DASH_HOMING_RANGE: 460, DASH_HOMING_CONE: 0.66, DASH_HOMING_MAX: 0.13,
+  // Narrowed so only a near-dead-ahead, nearby enemy qualifies: range 460->300,
+  // cone 0.66 (~49deg) -> 0.86 (~31deg), max bend 0.13 (~7.4deg) -> 0.07 (~4deg).
+  // This kills the "homing too strong" magnet feel while keeping the connect-assist.
+  DASH_HOMING_RANGE: 300, DASH_HOMING_CONE: 0.86, DASH_HOMING_MAX: 0.07,
   DASH_PRIME_MULT: 1.5, DASH_PRIME_PIERCE: 1, // "dash primes next shot" relic payload
   HURT_IFRAMES: 0.92, HURT_KNOCK: 370,
   PICKUP_RANGE: 138,

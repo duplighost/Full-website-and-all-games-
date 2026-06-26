@@ -236,10 +236,13 @@ export function getAim() {
     if (n.m > 8) { ax = n.x; ay = n.y; aiming = true; }
     firing = mouse.down;
   }
+  // Gamepad right stick only takes over when nothing else is actively aiming this frame,
+  // so a connected controller resting just past the deadzone (stick drift) can't hijack
+  // mouse/touch aim and force-fire the wrong way. Deadzone raised 0.2 -> 0.28 to reject drift.
   const gp = (typeof navigator !== 'undefined' && navigator.getGamepads) ? navigator.getGamepads()[0] : null;
-  if (gp) {
-    const rx = Math.abs(gp.axes[2] || 0) > 0.2 ? gp.axes[2] : 0;
-    const ry = Math.abs(gp.axes[3] || 0) > 0.2 ? gp.axes[3] : 0;
+  if (gp && !aiming) {
+    const rx = Math.abs(gp.axes[2] || 0) > 0.28 ? gp.axes[2] : 0;
+    const ry = Math.abs(gp.axes[3] || 0) > 0.28 ? gp.axes[3] : 0;
     if (rx || ry) {
       const n = norm(rx, ry);
       ax = n.x; ay = n.y; aiming = true; firing = true;
@@ -261,8 +264,10 @@ function nearestEnemyDir(p) {
   if (state.room) {
     for (const e of state.room.enemies) {
       const d = dist(p.x, p.y, e.x, e.y);
-      // don't lock onto a target you can't legally hit from here (e.g. a sniper up a tier)
-      if (e.hp > 0 && e.level <= p.level && d < bd && d < 620) { best = e; bd = d; }
+      // don't lock onto a target you can't legally hit from here (e.g. a sniper up a tier),
+      // and skip off-route sentinels — matches the player-side nearestEnemy() rule so the
+      // two auto-aim paths can't disagree and flip the shot direction frame to frame.
+      if (e.hp > 0 && !e.offRoute && e.level <= p.level && d < bd && d < 620) { best = e; bd = d; }
     }
   }
   if (best) {

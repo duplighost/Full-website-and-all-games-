@@ -1,5 +1,5 @@
 // Projectiles for both sides, with pierce/bounce hooks and obstacle cover.
-import { CAPS, PLAYER } from '../config.js';
+import { CAPS, PLAYER, TIER_LIFT } from '../config.js';
 import { state } from '../state.js';
 import { clamp, dist, norm } from '../rng.js';
 import { view } from '../render/camera.js';
@@ -17,13 +17,26 @@ export function spawnBullet(room, owner, x, y, vx, vy, r, damage, life, color, o
   if (count > cap) return null;
   const b = { owner, x, y, vx, vy, r, damage, life, max: life, color,
     pierce: opts.pierce || 0, bounces: opts.bounces || 0, level: opts.level || 0, hitIds: null, ...opts };
+  // Freeze the bullet's drawn height at its muzzle's roof height. drawBullets used to
+  // sample the tier under the bullet's current position, so a rooftop bolt snapped down
+  // to the street the instant it left its building's footprint — a vertical teleport.
+  let liftPx = 0;
+  if ((b.level || 0) > 0 && room.tiers) {
+    for (const t of room.tiers) {
+      if (x >= t.x && x <= t.x + t.w && y >= t.y && y <= t.y + t.h) { liftPx = TIER_LIFT * (t.rise || 1); break; }
+    }
+    if (!liftPx) liftPx = TIER_LIFT; // fired just off the ledge → still hold a roof height, never snap to street
+  }
+  b.liftPx = liftPx;
   if (owner === 'player') hooks.run('onBulletSpawn', b);
   room.bullets.push(b);
   return b;
 }
 
 export function fireEnemyShot(room, e, dx, dy, speed, r, life, color) {
-  return spawnBullet(room, 'enemy', e.x + dx * (e.r + 6), e.y + dy * (e.r + 6), dx * speed, dy * speed, r, 1, life, color || e.color, { level: e.boss ? 1 : (e.level || 0) });
+  // Bullet inherits the shooter's ACTUAL level (was hardcoded 1 for bosses, which drew
+  // boss fire at rooftop height while it hit you on the street). Bosses are level 0.
+  return spawnBullet(room, 'enemy', e.x + dx * (e.r + 6), e.y + dy * (e.r + 6), dx * speed, dy * speed, r, 1, life, color || e.color, { level: e.level || 0 });
 }
 
 // No Moon's two firing grammars (game_inline.js:5124-5167)
@@ -127,7 +140,7 @@ export function updateBullets(room, dt) {
         const minAlign = relic ? -1 : (PLAYER.SHOT_HOMING_CONE ?? 0.2);
         let best = null, bestScore = Infinity;
         for (const e of room.enemies) {
-          if (e.hp <= 0 || (e.level || 0) !== (b.level || 0)) continue;
+          if (e.hp <= 0 || (e.level || 0) > (b.level || 0)) continue; // can only curve toward a target the bolt can actually hit
           const ex = e.x - b.x, ey = e.y - b.y;
           const d = Math.hypot(ex, ey);
           if (d < 1 || d > range) continue;

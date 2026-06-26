@@ -13,7 +13,7 @@ import { damageEnemy } from './combat.js';
 import { damageObstacle } from './breakables.js';
 import { hooks } from './items.js';
 import { view } from '../render/camera.js';
-import { levelAt, surfaceAt } from './levels.js';
+import { levelAt, levelStable, surfaceAt } from './levels.js';
 
 export function makePlayer() {
   return {
@@ -92,8 +92,9 @@ export function updatePlayer(p, move, aim, room, dt) {
 
   // aim + auto-fire: the gun never stops. Manual aim wins; with no manual aim, lock onto
   // the nearest enemy you can actually hit. If enemies are around but none are hittable
-  // from here (e.g. all up on a roof above you), keep firing where you're heading so shots
-  // always come out — the gun going silent felt like a bug.
+  // from here (e.g. all up on a roof above you), keep firing along the LAST aimed direction
+  // so shots still come out — but never silently swing aim onto the movement vector, which
+  // made shots fly off where you were running instead of where you pointed.
   let firing = false;
   if (aim.active) {
     p.aimX = aim.x; p.aimY = aim.y; firing = true;
@@ -102,9 +103,7 @@ export function updatePlayer(p, move, aim, room, dt) {
     if (tgt) {
       const n = norm(tgt.x - p.x, tgt.y - p.y); p.aimX = n.x; p.aimY = n.y; firing = true;
     } else if (room.enemies.some(e => e.hp > 0 && !e.offRoute)) {
-      const sp = Math.hypot(p.vx, p.vy);
-      if (sp > 40) { p.aimX = p.vx / sp; p.aimY = p.vy / sp; } // aim where you're running
-      firing = true;
+      firing = true; // keep firing along the last committed p.aimX/p.aimY — don't redirect to velocity
     }
   }
   p.face = Math.atan2(p.aimY, p.aimX);
@@ -189,7 +188,7 @@ export function updatePlayer(p, move, aim, room, dt) {
   if (p.dashT > 0) dashBreakCrossedObstacles(p, room, oldX, oldY, p.x, p.y);
   const blockedAnnexDash = blockSealedAnnexBreach(p, room, oldX, oldY);
   for (const o of room.obstacles) if (!o.gone) resolveCircleObstacle(p, o);
-  p.level = levelAt(room, p.x, p.y); // ground=0, raised platform=1 (set by ramps)
+  p.level = levelStable(room, p.x, p.y, p.r, p.level); // ground=0, raised=1; hysteretic so it can't flicker on a ledge
   if (p.dashT > 0) {
     // on the victory lap the express rail wins over vents, so a dash toward the exit
     // always grabs the rail home instead of getting bounced up a launcher.
@@ -977,7 +976,7 @@ function performDashCut(p, room, range) {
   const dmg = p.damage * (1 + p.perks.damage * 0.15) * PLAYER.DASH_HIT_MULT;
   let hits = 0;
   for (const e of room.enemies) {
-    if (e.hp <= 0 || e.level !== p.level) continue; // dash only cuts your own level
+    if (e.hp <= 0 || (e.level || 0) > (p.level || 0)) continue; // dash cuts your level and anything below it (matches shooting down)
     const key = e.id ?? e;
     if (p._dashHitIds.has(key)) continue;           // one hit per enemy per dash
     if (dist(p.x, p.y, e.x, e.y) < range + e.r) {
@@ -1009,7 +1008,7 @@ function homingDashDir(p, room, nx, ny) {
   const lvl = p.level || 0;
   let best = null, bestScore = -Infinity;
   for (const e of room.enemies) {
-    if (e.hp <= 0 || (e.level || 0) !== lvl) continue;
+    if (e.hp <= 0 || (e.level || 0) > lvl) continue; // home onto your level or anything below — same rule as the cut
     const dx = e.x - p.x, dy = e.y - p.y;
     const d = Math.hypot(dx, dy);
     if (d < 1 || d > range + e.r) continue;

@@ -48,7 +48,7 @@ export function makeBoss(bossId, room) {
   const hpScale = 1 + room.idx * 0.08 + room.stage * 0.06;
   const spdScale = 1 + room.stage * 0.03;
   Object.assign(e, {
-    type: 'boss', bossId, boss: true, display: def.name,
+    type: 'boss', bossId, boss: true, display: def.name, level: 0, // ground-locked arena fight
     r: def.r, hp: def.hp * hpScale, maxHp: def.hp * hpScale,
     speed: def.speed * spdScale, color: def.color, score: def.score,
     brain: def.brain, fireCd: 1.2, ringCd: 2.4, dashCd: 3.4, summons: 0, phaseLock: 0,
@@ -179,7 +179,7 @@ function wardenBrain(e, room, p, to, d, dt) {
   e.phaseLock = Math.max(0, (e.phaseLock || 0) - dt);
   if (hpFrac < 0.75 && e.summons < 1) { e.summons = 1; e.phaseLock = 0.70; summonFromBoss(e, ['skitter', 'gunner'], room); }
   if (hpFrac < 0.46 && e.summons < 2) { e.summons = 2; e.phaseLock = 0.82; summonFromBoss(e, ['charger', 'brute'], room); }
-  if (hpFrac < 0.5 && !e.phased) bossPhaseShift(e, room, 'THE WARDEN UNSEALS', '#ffd24d');
+  if (hpFrac < 0.52 && !e.phased) bossPhaseShift(e, room, 'THE WARDEN UNSEALS', '#ffd24d');
   const phase3 = hpFrac < 0.46 || e.enraged;
 
   // ★ SIGNATURE: armored, with one rotating GAP in its shield. Only hits/dashes that
@@ -201,6 +201,9 @@ function wardenBrain(e, room, p, to, d, dt) {
     if (e.fireCd <= 0) {
       e.fireCd = phase3 ? 1.12 : 1.46;
       fireEnemyBurst(room, e, p.x, p.y, phase3 ? 5 : 4, phase3 ? 0.92 : 0.74, 266 + idx * 10, 3.2, '#ffe394');
+      // ★ gap-synced lance: a hard bolt out of the shield's open gap — the gap is both
+      // where you can hurt the Warden and where it hurts you, and it keeps rotating.
+      fireEnemyShot(room, e, Math.cos(e.shieldAngle), Math.sin(e.shieldAngle), 380 + idx * 10, 4.4, 3.0, '#fff1b0');
     }
     if (e.ringCd <= 0) {
       e.ringCd = phase3 ? 2.45 : 3.18;
@@ -218,7 +221,7 @@ function archonBrain(e, room, p, to, d, dt) {
   if (hpFrac < 0.82 && e.summons < 1) { e.summons = 1; e.phaseLock = 0.7; summonFromBoss(e, ['charger', 'sniper'], room); }
   if (hpFrac < 0.58 && e.summons < 2) { e.summons = 2; e.phaseLock = 0.7; summonFromBoss(e, ['hexer', 'myrmidon'], room); }
   if (hpFrac < 0.34 && e.summons < 3) { e.summons = 3; e.phaseLock = 0.82; summonFromBoss(e, ['brute', 'sniper', 'hexer'], room); }
-  if (hpFrac < 0.5 && !e.phased) bossPhaseShift(e, room, 'THE NULL UNFOLDS', '#ff9bf5');
+  if (hpFrac < 0.42 && !e.phased) bossPhaseShift(e, room, 'THE NULL UNFOLDS', '#ff9bf5');
   const enraged = hpFrac < 0.34 || e.enraged;
 
   let ax = to.x * e.speed * 0.88, ay = to.y * e.speed * 0.88;
@@ -261,7 +264,10 @@ function archonBrain(e, room, p, to, d, dt) {
     }
     if (e.ringCd <= 0) {
       e.ringCd = enraged ? 1.22 : 1.7;
-      fireEnemyRing(room, e, enraged ? 18 : 14, 235 + idx * 12, 4.2, '#ffeaa9', e.seed + e.phase * 0.3);
+      // spinning crossfire: each ring is rotated off the previous one, so it reads as a
+      // turning pinwheel rather than Warden's static even ring.
+      e.ringSpin = (e.ringSpin || 0) + (enraged ? 0.62 : 0.42);
+      fireEnemyRing(room, e, enraged ? 18 : 14, 235 + idx * 12, 4.2, '#ffeaa9', e.seed + e.ringSpin);
     }
   }
 }
@@ -278,7 +284,7 @@ function falseMoonBrain(e, room, p, to, d, dt) {
   const ay = to.y * e.speed * want + Math.sin(orbit) * e.speed * 0.85;
   e.vx = damp(e.vx, ax, 5.5, dt); e.vy = damp(e.vy, ay, 5.5, dt);
 
-  if (hpFrac < 0.5 && !e.phased) bossPhaseShift(e, room, 'THE MOON SHEDS ITS MASK', '#ff7be0');
+  if (hpFrac < 0.62 && !e.phased) bossPhaseShift(e, room, 'THE MOON SHEDS ITS MASK', '#ff7be0');
 
   // ★ SIGNATURE: the false moon INHALES (telegraph) then drags you in, then blasts a
   // ring outward. Dash to break the pull — i-frames + dash speed beat the gravity.
@@ -308,9 +314,11 @@ function falseMoonBrain(e, room, p, to, d, dt) {
   e.fireCd -= dt; e.ringCd -= dt;
   if (e.fireCd <= 0 && d < 820) {
     e.fireCd = 1.15;
-    // signature: a volley along YOUR aim line, reflected back (punishes tunnel vision)
+    // signature: a volley along YOUR aim line, reflected back (punishes tunnel vision).
+    // Enraged it fans wider (5 shots), so holding a single aim line gets dangerous.
     const mirror = Math.atan2(p.aimY, p.aimX) + Math.PI;
-    for (let k = -1; k <= 1; k++) {
+    const wing = e.enraged ? 2 : 1;
+    for (let k = -wing; k <= wing; k++) {
       const a = mirror + k * 0.14;
       fireEnemyShot(room, e, Math.cos(a), Math.sin(a), 330 + idx * 8, 5.4, 2.6, '#f0b8ff');
     }
@@ -342,15 +350,17 @@ function spiggotBrain(e, room, p, to, d, dt) {
     e.fireCd = 1.5;
     fireEnemyBurst(room, e, p.x, p.y, 3, 0.34, 250 + idx * 8, 2.9, '#c596ff');
   }
-  if (hpFrac < 0.5 && !e.phased) bossPhaseShift(e, room, 'SPIGGOT BLOOMS OPEN', '#6effc0');
-  // ★ SIGNATURE: once it blooms (≤50% HP), a slow rotating spore SPIRAL you weave/dash
-  // through — a 4th arm and a faster cadence once enraged.
-  if (e.enraged) {
-    const arms = 4;
-    e.spiralA += dt * 2.8;
+  if (hpFrac < 0.58 && !e.phased) bossPhaseShift(e, room, 'SPIGGOT BLOOMS OPEN', '#6effc0');
+  // ★ SIGNATURE: the spore SPIRAL is Spiggot's identity, so it weaves from the START —
+  // a slow 2-arm spiral you thread through, opening to a faster 4-arm spiral once it
+  // blooms (enraged). Front-loading it is what makes Spiggot read as "the spiral boss"
+  // instead of a slow chaser that happens to spiral late.
+  {
+    const arms = e.enraged ? 4 : 2;
+    e.spiralA += dt * (e.enraged ? 2.8 : 1.9);
     e.spiralCd -= dt;
     if (e.spiralCd <= 0) {
-      e.spiralCd = 0.092;
+      e.spiralCd = e.enraged ? 0.092 : 0.22;
       for (let arm = 0; arm < arms; arm++) {
         const a = e.spiralA + arm * (TAU / arms);
         fireEnemyShot(room, e, Math.cos(a), Math.sin(a), 200 + idx * 5, 4.6, 3.4, '#9effdc');
