@@ -7,7 +7,7 @@ A self-contained Three.js browser game built for Qualiacology: endless procedura
 Because this uses ES modules, run it from a local web server instead of opening `index.html` directly:
 
 ```bash
-cd afterlight-atlas
+cd afterlight
 python3 -m http.server 8765
 ```
 
@@ -29,4 +29,4 @@ Destructibles: crystals, small rocks, and glowing lumen pods can be shot, slashe
 
 ## Deploy
 
-The folder is static. Drop `afterlight-atlas/` into the site root and link to `/afterlight-atlas/`. The included site zip already does this.
+The folder is static. Drop `afterlight/` into the site root and link to `/afterlight/`. (It is not yet linked from the main Qualiacology site — wire up a nav link + `/afterlight/` route when you want it public.)

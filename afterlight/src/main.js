@@ -307,17 +307,21 @@ class ParticleSystem {
   }
   update(dt) {
     const p = this.pos;
+    let live = 0;
     for (let i = 0; i < this.max; i++) {
       if (this.life[i] <= 0) continue;
       this.life[i] -= dt;
       const j = i * 3;
-      if (this.life[i] <= 0) { p[j + 1] = -9999; continue; }
+      if (this.life[i] <= 0) { p[j + 1] = -9999; this._dirty = true; continue; }
       const v = this.vel[i];
       v.y -= 2.8 * dt;
       p[j] += v.x * dt; p[j + 1] += v.y * dt; p[j + 2] += v.z * dt;
       v.multiplyScalar(1 - Math.min(0.9, dt * 1.8));
+      live++;
     }
-    this.points.geometry.attributes.position.needsUpdate = true;
+    // Only re-upload the (28KB) position buffer when particles actually moved or expired
+    // this frame; while none are alive (e.g. exploring with no combat) we skip the upload.
+    if (live > 0 || this._dirty) { this.points.geometry.attributes.position.needsUpdate = true; this._dirty = false; }
   }
 }
 
@@ -615,7 +619,7 @@ class InputState {
       el.addEventListener('pointercancel', release);
       el.addEventListener('lostpointercapture', release);
     };
-    bindBtn('touchShoot', () => { this.shoot = true; this.fireQueued++; vibe(10); }, () => { this.shoot = false; });
+    bindBtn('touchShoot', () => { this.shoot = true; vibe(10); }, () => { this.shoot = false; }); // hold flag covers firing; no extra queued shot on release
     bindBtn('touchDash', () => { this.dashQueued++; vibe(18); });
     bindBtn('touchJump', () => { this.jumpQueued++; this.jumpHeld = true; }, () => this.jumpHeld = false);
     bindBtn('touchSlash', () => { this.slash = true; this.slashQueued++; vibe(15); }, () => this.slash = false);
@@ -651,6 +655,7 @@ class ChunkManager {
     this.chunks = new Map();
     this.buildQueue = [];
     this.buildSet = new Set();
+    this.decorQueue = []; // chunks whose terrain is built but heavy biome decoration is still pending
     this.solidsScratch = [];
     this.activeScratch = { interactables: [], rails: [], destructibles: [] };
     this.tmpColor = new THREE.Color();
@@ -669,7 +674,12 @@ class ChunkManager {
       road: mat(0x161725, { roughness: 0.84 }), concrete: mat(0x5c6278), dark: mat(0x101020), wall: mat(0x45506a), warmWall: mat(0x8b6e58), roof: mat(0x38203b), snowRoof: mat(0xe5f3ff),
       window: mat(0x7ff5ff, { emissive: 0x54eaff, emissiveIntensity: 1.9, roughness: 0.25 }), gold: mat(0xffd36e, { emissive: 0xd88c2b, emissiveIntensity: 0.8 }), pink: mat(0xff4fd8, { emissive: 0xff4fd8, emissiveIntensity: 1.35 }), cyan: mat(0x62f7ff, { emissive: 0x62f7ff, emissiveIntensity: 1.25 }),
       violet: mat(0x9f74ff, { emissive: 0x6b44ff, emissiveIntensity: 0.85 }), leaf: mat(0x2f6c6c), trunk: mat(0x5b3c2c), sand: mat(0xd6a75d), snow: mat(0xd7e8ff), rock: mat(0x4d536c),
-      water: new THREE.MeshPhysicalMaterial({ color: 0x5ef8ff, roughness: 0.12, metalness: 0, transparent: true, opacity: 0.58, transmission: 0.25, emissive: 0x0d5a7e, emissiveIntensity: 0.3, side: THREE.DoubleSide }),
+      // Plain standard material (no `transmission`): a transmission>0 material makes
+      // three.js run a full second scene render + MSAA-resolve + mipmap every frame any
+      // water is visible (Chromium reports it as "GPU stall due to ReadPixels"), which
+      // roughly doubled render cost. The neon look comes from emissive+opacity, so the
+      // visual loss is negligible while the extra pass disappears.
+      water: new THREE.MeshStandardMaterial({ color: 0x5ef8ff, roughness: 0.18, metalness: 0, transparent: true, opacity: 0.62, emissive: 0x0d5a7e, emissiveIntensity: 0.45, side: THREE.DoubleSide }),
       invisible: new THREE.MeshBasicMaterial({ color: 0xffffff, visible: false })
     };
   }
@@ -702,6 +712,13 @@ class ChunkManager {
       budget--; built++;
       if (built > 0 && performance.now() - start > msBudget) break;
     }
+    // Decorate already-built chunks, one biome-gen at a time, until the frame's time budget
+    // is spent. Spreading decoration across frames is what stops a single chunk from freezing.
+    while (this.decorQueue.length && performance.now() - start < msBudget) {
+      const rec = this.decorQueue.shift();
+      if (this.chunks.get(this.key(rec.cx, rec.cz)) === rec) this.decorate(rec);
+    }
+    if (this.decorQueue.length > 48) this.decorQueue = this.decorQueue.filter(r => this.chunks.get(this.key(r.cx, r.cz)) === r);
     // Drop stale queued work after teleports/restarts; it prevents old neighborhoods from being built off-screen.
     if (this.buildQueue.length > 64) {
       this.buildQueue = this.buildQueue.filter(m => want.has(m.k));
@@ -728,8 +745,11 @@ class ChunkManager {
     if (Math.abs(w) > 0.62 && r > 220) b = w > 0 ? 'city' : 'forest';
     return b;
   }
-  heightAt(x, z) {
-    const b = this.biomeAt(x, z);
+  heightAt(x, z, biomeHint) {
+    // biomeHint lets callers that already know the chunk's biome skip the biomeAt() fbm
+    // recompute — addTerrain calls this once per vertex (169-289x/chunk), so dropping that
+    // extra 3-octave noise per call is a large chunk-build saving.
+    const b = biomeHint || this.biomeAt(x, z);
     const n = fbm(x * 0.013, z * 0.013, 5);
     const n2 = fbm(x * 0.004 - 22, z * 0.004 + 9, 3);
     if (b === 'city') return Math.max(0, n * 0.8 + n2 * 0.6);
@@ -773,28 +793,38 @@ class ChunkManager {
       light.position.set(lx, ly, lz); group.add(light); lights.push(light); return light;
     };
     const ctxBase = { group, ox, oz, rng, biome, addMesh, addSolid, addLight, interactables, rails, lights, destructibles };
+    // Terrain + paths build now (cheap, gives the chunk a floor + collision immediately);
+    // the heavy biome decoration (hundreds of meshes) is deferred to decorate() so a single
+    // chunk never blocks a whole frame — the prime cause of the multi-hundred-ms freezes.
     this.addTerrain(group, cx, cz, biome);
     this.addPaths(group, ox, oz, biome, rng);
+    const rec = { group, solids, interactables, rails, lights, destructibles, biome, cx, cz, _decor: ctxBase };
+    this.decorQueue.push(rec);
+    return rec;
+  }
+  // Heavy per-chunk decoration, run from the time-budgeted queue in update() a frame or two
+  // after the terrain so the work is spread across frames instead of one big stall.
+  decorate(rec) {
+    const ctx = rec._decor; if (!ctx) return;
+    rec._decor = null;
+    const { biome, cx, cz } = rec, rng = ctx.rng;
+    if (biome === 'city') this.genCity(ctx);
+    else if (biome === 'desert') this.genDesert(ctx);
+    else if (biome === 'snow') this.genSnow(ctx);
+    else if (biome === 'forest') this.genForest(ctx);
+    else if (biome === 'coast') this.genCoast(ctx);
+    else this.genMeadow(ctx);
 
-    if (biome === 'city') this.genCity(ctxBase);
-    else if (biome === 'desert') this.genDesert(ctxBase);
-    else if (biome === 'snow') this.genSnow(ctxBase);
-    else if (biome === 'forest') this.genForest(ctxBase);
-    else if (biome === 'coast') this.genCoast(ctxBase);
-    else this.genMeadow(ctxBase);
-
-    if (cx === 0 && cz === 0) this.addStartGarden(ctxBase);
+    if (cx === 0 && cz === 0) this.addStartGarden(ctx);
 
     // Landmarks appear everywhere, but never in every chunk. Scarcity keeps them from feeling like Ubisoft sneezed icons all over your cornea.
     if ((hash2(cx, cz) > 0.72 || (Math.abs(cx) + Math.abs(cz)) % 7 === 0) && !(cx === 0 && cz === 0)) {
-      this.addLandmark({ ...ctxBase, id: 0 });
+      this.addLandmark({ ...ctx, id: 0 });
     }
     // Home sanctuaries in many chunks, especially near the center and in snow/meadow.
     if (!(cx === 0 && cz === 0) && (biome === 'meadow' || biome === 'snow' || (rng() > 0.72 && biome !== 'city'))) {
-      this.addHome({ ...ctxBase, id: 1 });
+      this.addHome({ ...ctx, id: 1 });
     }
-
-    return { group, solids, interactables, rails, lights, destructibles, biome, cx, cz };
   }
   addTerrain(group, cx, cz, biome) {
     const div = this.detail;
@@ -805,7 +835,7 @@ class ChunkManager {
         const lx = ix / div * CHUNK - CHUNK / 2;
         const lz = iz / div * CHUNK - CHUNK / 2;
         const wx = ox + lx, wz = oz + lz;
-        const h = this.heightAt(wx, wz);
+        const h = this.heightAt(wx, wz, biome);
         positions.push(lx, h, lz);
         const col = this.terrainColor(biome, h, wx, wz);
         colors.push(col.r, col.g, col.b);
@@ -848,8 +878,10 @@ class ChunkManager {
       const sx = randRangeR(rng, 8, 18), sz = randRangeR(rng, 8, 18), sy = randRangeR(rng, 12, 48) * (rng() > 0.88 ? 1.5 : 1);
       const mat = rng() > 0.5 ? this.mats.dark : this.mats.wall;
       this.addBoxDecor(ctx, mat, lx, lz, sx, sy, sz, 0, 0, true);
-      const wy = this.heightAt(ctx.ox + lx, ctx.oz + lz);
-      for (let w = 0; w < Math.min(42, sy / 2.6); w++) {
+      const wy = this.heightAt(ctx.ox + lx, ctx.oz + lz, 'city');
+      // Cap windows per building: the old min(42, sy/2.6) made up to ~27 window meshes per
+      // tower (~500/chunk), the single biggest contributor to the chunk-build freeze.
+      for (let w = 0; w < Math.min(12, sy / 3.4); w++) {
         const side = w % 4, row = 2 + (w % 8) * 3.2, off = ((w * 7) % 10 - 5) * 0.9;
         let x = lx, z = lz, scx = 1.2, scz = 0.08;
         if (side === 0) { z += sz / 2 + 0.05; x += off; }
@@ -959,7 +991,7 @@ class ChunkManager {
   addWater(ctx, lx, lz, radius = 16, big = false) {
     const y = this.heightAt(ctx.ox + lx, ctx.oz + lz) + 0.05;
     const geo = new THREE.CircleGeometry(radius, 48); geo.rotateX(-Math.PI / 2); geo.userData.disposable = true;
-    const mesh = new THREE.Mesh(geo, this.mats.water); mesh.position.set(lx, y, lz); mesh.userData.disposable = true; groupAdd(ctx.group, mesh);
+    const mesh = new THREE.Mesh(geo, this.mats.water); mesh.position.set(lx, y, lz); mesh.userData.disposable = true; ctx.group.add(mesh);
     ctx.interactables.push({ type: 'water', key: keyName(ctx.ox + lx, ctx.oz + lz, 'water'), pos: new THREE.Vector3(ctx.ox + lx, y, ctx.oz + lz), radius: radius + 2, label: big ? 'listen to the ocean glass' : 'drink the impossible water', used: false });
   }
   addLandmark(ctx) {
@@ -1059,7 +1091,6 @@ class ChunkManager {
     return out;
   }
 }
-function groupAdd(g, mesh) { g.add(mesh); }
 function randCell(rng) { return randRangeR(rng, -38, 38); }
 function randRangeR(rng, a, b) { return a + rng() * (b - a); }
 
@@ -1821,7 +1852,9 @@ class Game {
     energyFill.style.width = `${clamp(p.energy / p.maxEnergy, 0, 1) * 100}%`; energyText.textContent = `${Math.ceil(p.energy)}`;
     biomeReadout.textContent = `${BIOMES[biome].label} · ${formatMeters(this.run.distance)} from center`;
     statsEl.innerHTML = `kills ${this.run.kills}<br>awe ${Math.floor(this.run.awe)}<br>combo x${Math.max(1, this.run.combo).toFixed(1)}<br>upgrades ${this.run.upgrades}`;
-    const active = this.world.activeNear(p.pos.x, p.pos.z).interactables;
+    // Reuse the neighborhood scan update() already did this frame (this.nearActive) instead
+    // of rebuilding the 25-chunk active set a second time per frame just for the HUD compass.
+    const active = (this.nearActive || this.world.activeNear(p.pos.x, p.pos.z)).interactables;
     let nearest = null, best = Infinity;
     for (const it of active) if (!save.seen[it.key] && it.type !== 'water') { const d = it.pos.distanceTo(p.pos); if (d < best && d < p.senseRange + 160) { best = d; nearest = it; } }
     if (nearest) {
@@ -1844,7 +1877,8 @@ class Game {
 }
 
 const game = new Game();
-window.__ATLAS = game;
+// Debug handle only when explicitly asked for (?debug) — not exposed on the public build.
+if (new URLSearchParams(location.search).has('debug')) window.__ATLAS = game;
 
 playBtn.addEventListener('click', () => game.startRun());
 resumeBtn.addEventListener('click', () => game.resume());
