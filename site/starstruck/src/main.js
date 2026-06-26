@@ -674,6 +674,15 @@ class ChunkManager {
       road: mat(0x161725, { roughness: 0.84 }), concrete: mat(0x5c6278), dark: mat(0x101020), wall: mat(0x45506a), warmWall: mat(0x8b6e58), roof: mat(0x38203b), snowRoof: mat(0xe5f3ff),
       window: mat(0x7ff5ff, { emissive: 0x54eaff, emissiveIntensity: 1.9, roughness: 0.25 }), gold: mat(0xffd36e, { emissive: 0xd88c2b, emissiveIntensity: 0.8 }), pink: mat(0xff4fd8, { emissive: 0xff4fd8, emissiveIntensity: 1.35 }), cyan: mat(0x62f7ff, { emissive: 0x62f7ff, emissiveIntensity: 1.25 }),
       violet: mat(0x9f74ff, { emissive: 0x6b44ff, emissiveIntensity: 0.85 }), leaf: mat(0x2f6c6c), trunk: mat(0x5b3c2c), sand: mat(0xd6a75d), snow: mat(0xd7e8ff), rock: mat(0x4d536c),
+      moon: mat(0xeef4ff, { emissive: 0xacc4f0, emissiveIntensity: 0.55, roughness: 0.95 }),
+      // vibrant alien-planet palettes (body + contrasting ring), one signature per nature biome
+      planets: [
+        { body: mat(0x16c8b0, { emissive: 0x0fae94, emissiveIntensity: 0.6, roughness: 0.5, metalness: 0.1 }), ring: mat(0xffe27d, { emissive: 0xffc24d, emissiveIntensity: 1.0 }), accent: 0x33ddc2 },
+        { body: mat(0xb24dff, { emissive: 0x7a2dff, emissiveIntensity: 0.62, roughness: 0.5, metalness: 0.1 }), ring: mat(0x62f7ff, { emissive: 0x62f7ff, emissiveIntensity: 1.0 }), accent: 0x9a5cff },
+        { body: mat(0xff7a4d, { emissive: 0xff3d6e, emissiveIntensity: 0.55, roughness: 0.5, metalness: 0.1 }), ring: mat(0xffd36e, { emissive: 0xffb84d, emissiveIntensity: 1.0 }), accent: 0xff6a55 },
+        { body: mat(0xff8fd0, { emissive: 0xc56fff, emissiveIntensity: 0.55, roughness: 0.5, metalness: 0.1 }), ring: mat(0xbff0ff, { emissive: 0xbff0ff, emissiveIntensity: 1.0 }), accent: 0xff8fd0 },
+      ],
+      ember: mat(0xff8a3d, { emissive: 0xff5a1e, emissiveIntensity: 1.5, roughness: 0.5 }), // glowing bioluminescent pools
       // Plain standard material (no `transmission`): a transmission>0 material makes
       // three.js run a full second scene render + MSAA-resolve + mipmap every frame any
       // water is visible (Chromium reports it as "GPU stall due to ReadPixels"), which
@@ -903,6 +912,7 @@ class ChunkManager {
     for (let i = 0; i < 18; i++) this.addTree(ctx, randCell(ctx.rng), randCell(ctx.rng), ctx.rng() > 0.75 ? 1.4 : 1.0);
     for (let i = 0; i < 14; i++) this.addCrystal(ctx, randCell(ctx.rng), randCell(ctx.rng), ctx.rng() > 0.5 ? 0xffd36e : 0x62f7ff, randRangeR(ctx.rng, 0.45, 1.1));
     for (let i = 0; i < 3; i++) if (ctx.rng() > 0.5) this.addPod(ctx, randCell(ctx.rng), randCell(ctx.rng), 0x75ffb1);
+    for (let i = 0; i < 5; i++) if (ctx.rng() > 0.45) this.addLumenPool(ctx, randCell(ctx.rng), randCell(ctx.rng));
     this.addRail(ctx, new THREE.Vector3(ctx.ox - 36, this.heightAt(ctx.ox - 36, ctx.oz + 23) + 0.6, ctx.oz + 23), new THREE.Vector3(ctx.ox + 36, this.heightAt(ctx.ox + 36, ctx.oz - 18) + 2.0, ctx.oz - 18), 0xffd36e);
     if (ctx.rng() > 0.4) this.addRail(ctx, new THREE.Vector3(ctx.ox + 30, this.heightAt(ctx.ox + 30, ctx.oz + 30) + 0.6, ctx.oz + 30), new THREE.Vector3(ctx.ox - 30, this.heightAt(ctx.ox - 30, ctx.oz - 30) + 1.6, ctx.oz - 30), 0x62f7ff);
   }
@@ -911,6 +921,7 @@ class ChunkManager {
     for (let i = 0; i < 10; i++) this.addRock(ctx, randCell(ctx.rng), randCell(ctx.rng), randRangeR(ctx.rng, 0.8, 2.1));
     for (let i = 0; i < 8; i++) this.addCrystal(ctx, randCell(ctx.rng), randCell(ctx.rng), 0x75ffb1, randRangeR(ctx.rng, 0.4, 0.9));
     for (let i = 0; i < 3; i++) if (ctx.rng() > 0.45) this.addPod(ctx, randCell(ctx.rng), randCell(ctx.rng), 0x75ffb1);
+    for (let i = 0; i < 5; i++) if (ctx.rng() > 0.45) this.addLumenPool(ctx, randCell(ctx.rng), randCell(ctx.rng));
     if (ctx.rng() > 0.55) this.addWater(ctx, randRangeR(ctx.rng, -24, 24), randRangeR(ctx.rng, -24, 24), randRangeR(ctx.rng, 9, 18));
     if (ctx.rng() > 0.4) this.addRail(ctx, new THREE.Vector3(ctx.ox - 34, this.heightAt(ctx.ox - 34, ctx.oz + 20) + 0.6, ctx.oz + 20), new THREE.Vector3(ctx.ox + 34, this.heightAt(ctx.ox + 34, ctx.oz - 20) + 1.8, ctx.oz - 20), 0x75ffb1);
   }
@@ -941,6 +952,7 @@ class ChunkManager {
     for (let i = 0; i < 10; i++) this.addRock(ctx, randCell(ctx.rng), randCell(ctx.rng), randRangeR(ctx.rng, 0.7, 2));
     for (let i = 0; i < 6; i++) this.addCrystal(ctx, randCell(ctx.rng), randCell(ctx.rng), 0x62f7ff, randRangeR(ctx.rng, 0.4, 0.9));
     for (let i = 0; i < 2; i++) if (ctx.rng() > 0.5) this.addPod(ctx, randCell(ctx.rng), randCell(ctx.rng), 0x62f7ff);
+    for (let i = 0; i < 6; i++) if (ctx.rng() > 0.4) this.addLumenPool(ctx, randCell(ctx.rng), randCell(ctx.rng));
     if (ctx.rng() > 0.45) this.addRail(ctx, new THREE.Vector3(ctx.ox - 36, this.heightAt(ctx.ox - 36, ctx.oz - 24) + 0.6, ctx.oz - 24), new THREE.Vector3(ctx.ox + 36, this.heightAt(ctx.ox + 36, ctx.oz + 24) + 2.0, ctx.oz + 24), 0x62f7ff);
   }
   addTree(ctx, lx, lz, s = 1) {
@@ -998,17 +1010,55 @@ class ChunkManager {
     const mesh = new THREE.Mesh(geo, this.mats.water); mesh.position.set(lx, y, lz); mesh.userData.disposable = true; ctx.group.add(mesh);
     ctx.interactables.push({ type: 'water', key: keyName(ctx.ox + lx, ctx.oz + lz, 'water'), pos: new THREE.Vector3(ctx.ox + lx, y, ctx.oz + lz), radius: radius + 2, label: big ? 'listen to the ocean glass' : 'drink the impossible water', used: false });
   }
+  // Bioluminescent amber pool — a flat glowing pad with a deep rim, like the glowing wells in
+  // an alien valley. Pure emissive (no light), so they're cheap to scatter in bunches.
+  addLumenPool(ctx, lx, lz) {
+    const y = this.heightAt(ctx.ox + lx, ctx.oz + lz);
+    const r = 1.6 + ctx.rng() * 2.4;
+    ctx.addMesh(this.geos.cyl, this.mats.ember, lx, y + 0.12, lz, r, 0.2, r);
+    ctx.addMesh(this.geos.torus, this.mats.wall, lx, y + 0.22, lz, r * 1.08, r * 1.08, r * 1.08, 0, Math.PI / 2);
+  }
+  // Each biome gets its OWN giant, recognizable landmark so areas read as distinct places you
+  // can navigate by — led by the Hung Moon (a huge glowing sphere on cables) over the open
+  // meadows/coasts, like the reference. They're big and emissive so you spot them from afar.
   addLandmark(ctx) {
     const lx = randRangeR(ctx.rng, -30, 30), lz = randRangeR(ctx.rng, -30, 30);
     const wx = ctx.ox + lx, wz = ctx.oz + lz, y0 = this.heightAt(wx, wz);
+    const b = ctx.biome;
+    let label;
+    if (b === 'coast') { this.landmarkMoon(ctx, lx, lz, y0); label = 'the Hung Moon'; }
+    else if (b === 'city') { this.landmarkSpire(ctx, lx, lz, y0); label = 'the Beacon'; }
+    else { // a vibrant alien planet, one signature colour per biome so you recognise the area on sight
+      const pi = b === 'forest' ? 1 : b === 'desert' ? 2 : b === 'snow' ? 3 : 0;
+      this.landmarkPlanet(ctx, lx, lz, y0, pi);
+      label = ['the Verdant World', 'the Violet Wanderer', 'the Ember Giant', 'the Rose World'][pi];
+    }
+    const key = keyName(wx, wz, 'vista', ctx.id);
+    ctx.interactables.push({ type: 'vista', key, pos: new THREE.Vector3(wx, y0 + 1.2, wz), radius: 6.4, label: save.seen[key] ? `return to ${label}` : `steal a realization at ${label}`, used: !!save.seen[key] });
+  }
+  landmarkMoon(ctx, lx, lz, y0) {
+    ctx.addMesh(this.geos.sphere, this.mats.moon, lx, y0 + 34, lz, 14, 14, 14); // giant glowing moon
+    for (const [ox, oz] of [[2.6, 2.6], [-2.6, 2.6], [2.6, -2.6], [-2.6, -2.6]]) ctx.addMesh(this.geos.cyl, this.mats.dark, lx + ox, y0 + 58, lz + oz, 0.12, 26, 0.12); // suspension cables
+    ctx.addLight?.(0xbcd2ff, 2.6, 95, 1.6, lx, y0 + 34, lz);
+  }
+  landmarkSpire(ctx, lx, lz, y0) {
     const info = BIOMES[ctx.biome];
-    const mat = ctx.biome === 'desert' ? this.mats.gold : ctx.biome === 'snow' ? this.mats.cyan : ctx.biome === 'city' ? this.mats.pink : this.mats.violet;
+    const mat = ctx.biome === 'city' ? this.mats.pink : this.mats.violet;
     ctx.addMesh(this.geos.cyl, this.mats.dark, lx, y0 + 0.25, lz, 5.2, 0.5, 5.2);
     ctx.addMesh(this.geos.cone, mat, lx, y0 + 4.8, lz, 2.0, 9.4, 2.0, ctx.rng() * TAU);
     ctx.addMesh(this.geos.torus, mat, lx, y0 + 7.6, lz, 3.2, 3.2, 3.2, ctx.rng() * TAU, Math.PI / 2);
     ctx.addLight?.(info.accent, 2.8, 34, 2, lx, y0 + 6.5, lz);
-    const key = keyName(wx, wz, 'vista', ctx.id);
-    ctx.interactables.push({ type: 'vista', key, pos: new THREE.Vector3(wx, y0 + 1.2, wz), radius: 5.8, label: save.seen[key] ? 'return to the understood vista' : 'steal a realization from the vista', used: !!save.seen[key] });
+  }
+  landmarkPlanet(ctx, lx, lz, y0, pi) {
+    const pal = this.mats.planets[pi % this.mats.planets.length];
+    const py = y0 + 25 + ctx.rng() * 9;            // floats in the sky, visible from afar
+    const R = 7 + ctx.rng() * 2.5;
+    ctx.addMesh(this.geos.sphere, pal.body, lx, py, lz, R, R, R, ctx.rng() * TAU);
+    const rr = R * 1.7;
+    ctx.addMesh(this.geos.torus, pal.ring, lx, py, lz, rr, rr, rr, ctx.rng() * TAU, 1.0 + ctx.rng() * 0.5); // tilted ring
+    const ma = ctx.rng() * TAU, md = rr + 2.5;     // a tiny orbiting moonlet
+    ctx.addMesh(this.geos.sphere, this.mats.moon, lx + Math.cos(ma) * md, py + 1.5, lz + Math.sin(ma) * md, 1.5, 1.5, 1.5);
+    ctx.addLight?.(pal.accent, 2.8, 70, 1.6, lx, py, lz);
   }
   addHome(ctx) {
     const lx = randRangeR(ctx.rng, -28, 28), lz = randRangeR(ctx.rng, -28, 28);
