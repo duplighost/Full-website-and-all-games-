@@ -44,7 +44,7 @@
       <div class="grid">
         <div class="control-card">
           <h2>Desktop</h2>
-          <p><b>WASD</b> move · <b>mouse</b> look · <b>click</b> shoot · <b>right click</b> slash · <b>Q</b> dash · <b>Space</b> jump/glide · <b>Shift</b> sprint · <b>E</b> interact · <b>F</b> surge</p>
+          <p><b>WASD</b> move · <b>mouse</b> look · <b>click</b> shoot · <b>right click</b> slash · <b>Q</b> dash · <b>Space</b> jump/glide · <b>Shift</b> sprint · <b>E</b> interact · <b>F</b> surge · <b>J</b> atlas</p>
         </div>
         <div class="control-card">
           <h2>Phone</h2>
@@ -72,7 +72,20 @@
       <p id="pauseStats" class="lede"></p>
       <div class="actions">
         <button id="resumeBtn" class="primary" type="button">Resume</button>
+        <button id="pauseJournalBtn" class="secondary" type="button">Atlas</button>
         <button id="backToStartBtn" class="secondary" type="button">Title</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="journal" class="screen hidden slim">
+    <div class="panel journal-panel">
+      <p class="kicker">the atlas remembers</p>
+      <h1>Places you found.</h1>
+      <p id="journalSummary" class="lede"></p>
+      <div id="journalList" class="journal-list"></div>
+      <div class="actions">
+        <button id="journalCloseBtn" class="primary" type="button">Back</button>
       </div>
     </div>
   </div>

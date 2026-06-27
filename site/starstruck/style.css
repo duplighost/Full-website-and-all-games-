@@ -318,6 +318,13 @@ button {
 .upgrade-card h2 { font-size: 22px; line-height: 1.02; margin: 0; letter-spacing: -.035em; }
 .upgrade-card p { margin: 0; color: rgba(255,255,255,.72); line-height: 1.4; font-size: 14px; }
 .upgrade-card .effect { color: var(--cyan); font-weight: 900; margin-top: auto; }
+.journal-list { margin-top: 18px; max-height: 46vh; overflow-y: auto; display: grid; gap: 7px; padding-right: 6px; }
+.journal-row { display: flex; align-items: baseline; gap: 12px; padding: 9px 13px; border-radius: 12px; background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.09); }
+.journal-row .j-icon { color: var(--gold); font-size: 13px; }
+.journal-row .j-name { font-weight: 800; letter-spacing: -.01em; }
+.journal-row .j-meta { margin-left: auto; color: rgba(255,255,255,.55); font-size: 12px; text-align: right; }
+.journal-list::-webkit-scrollbar { width: 8px; }
+.journal-list::-webkit-scrollbar-thumb { background: rgba(191,240,255,.25); border-radius: 99px; }
 .touch { position: fixed; inset: 0; z-index: 30; pointer-events: none; }
 .touch.hidden { display: none; }
 /* full-height touch zones: left half drives the floating move stick, right half looks + taps to fire */

@@ -39,6 +39,9 @@ const biomeReadout = $('biomeReadout');
 const statsEl = $('stats');
 const compassEl = $('compass');
 const minimapEl = $('minimap');
+const journalEl = $('journal');
+const journalSummary = $('journalSummary');
+const journalList = $('journalList');
 const promptEl = $('prompt');
 const toastEl = $('toast');
 const realizationLog = $('realizationLog');
@@ -103,7 +106,7 @@ function formatMeters(v) { return `${Math.max(0, Math.round(v))}m`; }
 function show(el) { el.classList.remove('hidden'); }
 function hide(el) { el.classList.add('hidden'); }
 function setScreen(which) {
-  for (const el of [loadingEl, startEl, pauseEl, upgradeEl, deathEl, webglError]) hide(el);
+  for (const el of [loadingEl, startEl, pauseEl, upgradeEl, deathEl, webglError, journalEl]) hide(el);
   if (which) show(which);
 }
 function requestPointerLockSafe() {
@@ -166,7 +169,20 @@ const POI_DEFS = {
   lantern:   { name: "the Hermit's Lantern", guarded: false, discoverR: 18, note: 'A lighthouse for a sea that left. Its keeper is gone, but the hearth is still warm.' },
   arcade:    { name: 'the Sunken Arcade',    guarded: true,  discoverR: 22, note: 'A neighborhood that drowned in dusk and kept its neon on out of spite. Rich pickings.' },
   hollow:    { name: 'the Crystal Hollow',   guarded: false, discoverR: 18, note: 'A bowl of light the ground forgot to close. Break gently; take everything.' },
-  summit:    { name: 'the Summit Shrine',    guarded: false, discoverR: 16, note: 'You climbed for this. The shrine does not congratulate you, which is exactly the gift.' }
+  summit:    { name: 'the Summit Shrine',    guarded: false, discoverR: 16, note: 'You climbed for this. The shrine does not congratulate you, which is exactly the gift.' },
+  observatory: { name: 'the Frozen Observatory', guarded: false, discoverR: 20, note: 'Someone aimed a long cold tube at the dark and waited. You can climb to where they sat.' },
+  cathedral:   { name: 'the Neon Cathedral',     guarded: true,  discoverR: 22, note: 'A building that worships voltage. The nave still hums; the altar still keeps a light on.' }
+};
+
+// Which POIs belong to which biome, so each region fields its own signature places. Summit
+// shrines override on high ground. Names overlapping across biomes is intentional flavor.
+const POI_BIOMES = {
+  meadow: ['obelisk', 'ziggurat', 'hollow', 'lantern'],
+  city:   ['arcade', 'cathedral', 'cathedral', 'ziggurat', 'starliner'],
+  desert: ['starliner', 'obelisk', 'observatory', 'arcade'],
+  snow:   ['observatory', 'observatory', 'lantern', 'obelisk', 'hollow'],
+  forest: ['hollow', 'hollow', 'obelisk', 'lantern', 'arcade'],
+  coast:  ['starliner', 'lantern', 'hollow', 'obelisk']
 };
 
 
@@ -228,9 +244,9 @@ function hasWebGL() {
 
 function loadSave() {
   try {
-    return Object.assign({ best: 0, runs: 0, totalAwe: 0, discoveries: 0, seen: {}, quality: null }, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}'));
+    return Object.assign({ best: 0, runs: 0, totalAwe: 0, discoveries: 0, seen: {}, journal: {}, quality: null }, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}'));
   } catch (_) {
-    return { best: 0, runs: 0, totalAwe: 0, discoveries: 0, seen: {}, quality: null };
+    return { best: 0, runs: 0, totalAwe: 0, discoveries: 0, seen: {}, journal: {}, quality: null };
   }
 }
 function storeSave() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (_) {} }
@@ -601,6 +617,7 @@ class InputState {
       if (e.code === 'KeyQ') this.dashQueued++;
       if (e.code === 'KeyF') this.surgeQueued++;
       if (e.code === 'KeyE') this.interactQueued++;
+      if (e.code === 'KeyJ') game.toggleJournal();
       if (e.code === 'KeyP' || e.code === 'Escape') game.togglePause();
     }, { passive: false });
     window.addEventListener('keyup', (e) => { this.keys[e.code] = false; if (e.code === 'Space') this.jumpHeld = false; });
@@ -1122,7 +1139,7 @@ class ChunkManager {
       else { this.landmarkAurora(ctx, lx, lz, y0, pi); label = 'a sky aurora'; }
     }
     const key = keyName(wx, wz, 'vista', ctx.id);
-    ctx.interactables.push({ type: 'vista', key, pos: new THREE.Vector3(wx, y0 + 1.2, wz), radius: 6.4, label: save.seen[key] ? `return to ${label}` : `steal a realization at ${label}`, used: !!save.seen[key] });
+    ctx.interactables.push({ type: 'vista', key, name: label, pos: new THREE.Vector3(wx, y0 + 1.2, wz), radius: 6.4, label: save.seen[key] ? `return to ${label}` : `steal a realization at ${label}`, used: !!save.seen[key] });
   }
   landmarkMoon(ctx, lx, lz, y0) {
     ctx.addMesh(this.geos.sphere, this.mats.moon, lx, y0 + 34, lz, 14, 14, 14); // giant glowing moon
@@ -1218,7 +1235,7 @@ class ChunkManager {
   addPOI(ctx) {
     const lx = randRangeR(ctx.rng, -24, 24), lz = randRangeR(ctx.rng, -24, 24);
     const wx = ctx.ox + lx, wz = ctx.oz + lz, y0 = this.heightAt(wx, wz);
-    const kinds = y0 > 7 ? ['summit', 'summit', 'lantern'] : ['starliner', 'obelisk', 'ziggurat', 'lantern', 'arcade', 'hollow'];
+    const kinds = y0 > 7 ? ['summit', 'summit', 'lantern'] : (POI_BIOMES[ctx.biome] || ['obelisk', 'ziggurat', 'hollow']);
     const kind = kinds[Math.floor(ctx.rng() * kinds.length)];
     this['poi_' + kind](ctx, lx, lz, y0);
     const def = POI_DEFS[kind], key = keyName(wx, wz, 'poi', ctx.id);
@@ -1303,6 +1320,38 @@ class ChunkManager {
     ctx.addLight?.(0xbcd2ff, 2.6, 42, 1.6, lx, y0 + 4.6, lz);
     const wx = ctx.ox + lx, wz = ctx.oz + lz, k = keyName(wx, wz, 'shrine', 5);
     ctx.interactables.push({ type: 'vista', key: k, pos: new THREE.Vector3(wx, y0 + 1, wz), radius: 5.5, label: save.seen[k] ? 'breathe at the summit' : 'reach the summit shrine', used: !!save.seen[k] });
+  }
+  poi_observatory(ctx, lx, lz, y0) {
+    const wall = ctx.biome === 'snow' ? this.mats.snowRoof : this.mats.wall;
+    // round drum base you can climb onto, capped with a dome and a long tilted telescope
+    this.addBoxDecor(ctx, this.mats.concrete, lx, lz, 11, 1.2, 11, 0, 0, true);   // climbable plinth
+    for (let i = 0; i < 5; i++) ctx.addMesh(this.geos.cyl, wall, lx, y0 + 1.7 + i * 1.0, lz, 4.6 - i * 0.15, 1.02, 4.6 - i * 0.15);
+    const domeY = y0 + 1.7 + 5 * 1.0;
+    ctx.addMesh(this.geos.sphere, wall, lx, domeY, lz, 4.4, 2.6, 4.4);             // dome
+    ctx.addMesh(this.geos.cyl, this.mats.dark, lx + 1.2, domeY + 1.8, lz, 0.7, 6.2, 0.7, 0.5, -0.7); // telescope barrel
+    ctx.addMesh(this.geos.torus, this.mats.cyan, lx + 2.6, domeY + 3.6, lz, 0.9, 0.9, 0.9, 0.5, Math.PI / 2);
+    ctx.addLight?.(0xbbe9ff, 2.4, 34, 1.8, lx, domeY + 1, lz);
+    this.addStairs(ctx, lx, lz + 8.5, 0, -1, 4, 0.55, 1.0, 2.4, this.mats.concrete);
+    ctx.addSolid(ctx.ox + lx, y0 + 1.2, ctx.oz + lz, 7, 6, 7);                     // drum collider
+    const wx = ctx.ox + lx, wz = ctx.oz + lz, k = keyName(wx, wz, 'shrine', 4);
+    ctx.interactables.push({ type: 'vista', key: k, pos: new THREE.Vector3(wx, y0 + 1.8, wz), radius: 5.5, label: save.seen[k] ? 'watch the dark from the dome' : 'mount the observatory', used: !!save.seen[k] });
+  }
+  poi_cathedral(ctx, lx, lz, y0) {
+    // a nave of tall neon arches with a glowing altar — voltage as religion
+    const span = 4.2;
+    for (let i = 0; i < 5; i++) {
+      const oz = (i - 2) * 6;
+      for (const sx of [-span, span]) { this.addBoxDecor(ctx, this.mats.dark, lx + sx, lz + oz, 1.2, randRangeR(ctx.rng, 9, 13), 1.2, 0, 0, true); }
+      const hy = this.heightAt(ctx.ox + lx, ctx.oz + lz + oz);
+      ctx.addMesh(this.geos.torus, i % 2 ? this.mats.pink : this.mats.cyan, lx, hy + 9.5, lz + oz, span + 1.2, span + 1.2, span + 1.2, 0, 0); // arch ring across the nave
+      ctx.addMesh(this.geos.box, i % 2 ? this.mats.cyan : this.mats.pink, lx + span, hy + 5, lz + oz, 0.1, 4, 0.7); // stained-glass strips
+      ctx.addMesh(this.geos.box, i % 2 ? this.mats.cyan : this.mats.pink, lx - span, hy + 5, lz + oz, 0.1, 4, 0.7);
+    }
+    ctx.addMesh(this.geos.cyl, this.mats.dark, lx, y0 + 0.4, lz - 12, 2.4, 0.8, 2.4);
+    ctx.addMesh(this.geos.cone, this.mats.violet, lx, y0 + 2.0, lz - 12, 0.9, 2.6, 0.9);
+    ctx.addLight?.(0x9f74ff, 2.8, 30, 2, lx, y0 + 2, lz - 12);
+    const wx = ctx.ox + lx, wz = ctx.oz + lz - 12, k = keyName(wx, wz, 'shrine', 3);
+    ctx.interactables.push({ type: 'vista', key: k, pos: new THREE.Vector3(wx, y0 + 1, wz), radius: 5.5, label: save.seen[k] ? 'kneel at the neon altar' : 'enter the neon cathedral', used: !!save.seen[k] });
   }
   addStartGarden(ctx) {
     this.addPod(ctx, 0, 26, 0x75ffb1);
@@ -1572,6 +1621,27 @@ class Game {
     this.mode = 'play'; setScreen(null); show(hudEl); requestPointerLockSafe(); this.last = performance.now();
   }
   title() { this.mode = 'title'; document.exitPointerLock?.(); setScreen(startEl); hide(hudEl); hide(touchEl); this.updateSaveChip(); }
+  toggleJournal() {
+    if (this.mode === 'journal') return this.closeJournal();
+    if (this.mode !== 'play' && this.mode !== 'pause') return;
+    this._journalFrom = this.mode;
+    this.mode = 'journal'; document.exitPointerLock?.(); this.renderJournal(); setScreen(journalEl); hide(touchEl);
+  }
+  closeJournal() {
+    if (this.mode !== 'journal') return;
+    if (this._journalFrom === 'pause') { this.mode = 'pause'; setScreen(pauseEl); }
+    else { this.mode = 'play'; setScreen(null); show(hudEl); if (IS_TOUCH) show(touchEl); else requestPointerLockSafe(); this.last = performance.now(); }
+  }
+  renderJournal() {
+    const entries = Object.values(save.journal || {}).sort((a, b) => a.dist - b.dist);
+    journalSummary.textContent = entries.length
+      ? `${entries.length} named place${entries.length === 1 ? '' : 's'} logged · ${save.discoveries || 0} wonders stolen across all runs`
+      : 'Nothing logged yet. Wander out and let some glow introduce itself.';
+    const icon = (k) => k === 'poi' || POI_DEFS[k] ? '◆' : '✦';
+    journalList.innerHTML = entries.length
+      ? entries.map(e => `<div class="journal-row"><span class="j-icon">${icon(e.kind)}</span><span class="j-name">${e.name}</span><span class="j-meta">${BIOMES[e.biome]?.label || e.biome || ''} · ${e.dist}m out</span></div>`).join('')
+      : '<p class="tiny">—</p>';
+  }
   die() {
     this.mode = 'death'; document.exitPointerLock?.();
     save.runs++; save.best = Math.max(save.best || 0, this.run.distance); save.totalAwe = (save.totalAwe || 0) + Math.floor(this.run.awe); storeSave();
@@ -1980,12 +2050,20 @@ class Game {
         if (d < 3) e.telegraph = 1;
         if (d < 1.7 && p.hurt(stat.contact, e.pos, this)) p.hp = 0;
       } else if (e.type === 'warden') {
-        desired.addScaledVector(dir, d > 7 ? 4.2 : 1.2); // big, slow, body-bully boss
+        const enraged = e.hp < e.maxHp * 0.35; // low-HP phase 2: faster, denser, adds an aimed lance
+        desired.addScaledVector(dir, d > 7 ? (enraged ? 5.6 : 4.2) : 1.2); // big, slow, body-bully boss
         e.fireCd -= dt;
-        if (e.fireCd < 0.7) e.telegraph = 1;
-        if (e.fireCd <= 0 && d < 95) {
-          e.fireCd = randRange(2.4, 3.6);
-          for (let k = 0; k < 10; k++) { const a = k / 10 * TAU; const sd = (this._wardenDir ||= new THREE.Vector3()).set(Math.cos(a), 0.05, Math.sin(a)); this.fireProjectile(true, e.pos, sd); } // radial spray
+        if (e.windup > 0) {
+          e.windup -= dt; e.telegraph = 1; // bright, readable wind-up before the spray
+          if (e.windup <= 0) {
+            const bolts = enraged ? 14 : 10, off = e.phase;
+            for (let k = 0; k < bolts; k++) { const a = off + k / bolts * TAU; const sd = (this._wardenDir ||= new THREE.Vector3()).set(Math.cos(a), 0.05, Math.sin(a)); this.fireProjectile(true, e.pos, sd); }
+            if (enraged) { const sd2 = (this._wardenAim ||= new THREE.Vector3()).set(p.pos.x, p.pos.y + 1.0, p.pos.z).sub(e.pos); this.fireProjectile(true, e.pos, sd2); }
+            e.fireCd = enraged ? randRange(1.5, 2.3) : randRange(2.4, 3.4);
+            this.shake = Math.max(this.shake, 0.3); this.audio.tone(120, 0.18, 'sawtooth', 0.06, 0.7);
+          }
+        } else if (e.fireCd <= 0 && d < 95) {
+          e.windup = enraged ? 0.6 : 0.85;
         }
         if (d < 2.8 && p.hurt(stat.contact, e.pos, this)) p.hp = 0;
       } else {
@@ -2007,14 +2085,15 @@ class Game {
       e.mat.emissive.copy(e.emColor).lerp(WHITE, Math.min(1, e.flash)).lerp(HIT_RED, pulse * 0.85);
       const grow = smoother(clamp((this.clock - e.born) / 0.34, 0, 1));
       e.mesh.scale.setScalar(grow * (1 + e.flash * 0.16) + (1 - grow) * 0.01);
-      // floating health bar appears after the enemy is hurt
+      // floating health bar appears after the enemy is hurt — bosses always show theirs
+      if (e.boss) e.barTimer = Math.max(e.barTimer, 0.5);
       if (e.barTimer > 0) {
         if (!e.bar) e.bar = this.makeHealthBar();
         e.bar.visible = true;
-        e.bar.position.set(e.pos.x, e.pos.y + e.radius + 0.95, e.pos.z);
+        e.bar.position.set(e.pos.x, e.pos.y + e.radius + (e.boss ? 1.6 : 0.95), e.pos.z);
         e.bar.quaternion.copy(this.camera.quaternion);
         e.bar.userData.pivot.scale.x = Math.max(0.0001, clamp(e.hp / e.maxHp, 0, 1));
-        const s = clamp(e.pos.distanceTo(this.camera.position) * 0.05, 0.85, 2.6);
+        const s = clamp(e.pos.distanceTo(this.camera.position) * 0.05, 0.85, 2.6) * (e.boss ? 2.0 : 1);
         e.bar.scale.set(s, s, s);
       } else if (e.bar) { e.bar.visible = false; }
       if (e.pos.distanceTo(p.pos) > 180) e.dead = true;
@@ -2114,6 +2193,16 @@ class Game {
     // a popped spore scatters into two skittering motes
     if (e.type === 'spore' && this.enemies.length < 40) {
       for (let i = 0; i < 2; i++) { const a = Math.random() * TAU; this.spawnEnemyAt('mote', e.pos.x + Math.cos(a) * 1.2, e.pos.z + Math.sin(a) * 1.2, e.biome); }
+    }
+    // felling a warden is the run's big payoff: a shower of loot and a guaranteed law
+    if (e.boss) {
+      for (let i = 0; i < 16; i++) this.spawnPickup(e.pos, 'awe', 10, 0xffd36e);
+      for (let i = 0; i < 2; i++) this.spawnPickup(e.pos, 'heart', 1, 0xff5672);
+      this.spawnPickup(e.pos, 'energy', 1, 0x62f7ff);
+      this.particles.spawn(e.pos, 0xffd36e, 80, 2.4); this.particles.spawn(e.pos, 0xffffff, 30, 1.4);
+      this.shake = Math.max(this.shake, 0.9); this.hitStop = Math.max(this.hitStop, 0.1);
+      this.toast('The warden folds. The atlas owes you something for that.', 3.2);
+      this.openUpgrade('boss');
     }
   }
   pickupMaterial(type, color) {
@@ -2229,13 +2318,20 @@ class Game {
       this.audio.pickup(); return;
     }
     if (it.type === 'vista') {
-      if (!save.seen[it.key]) { save.seen[it.key] = 1; save.discoveries = (save.discoveries || 0) + 1; storeSave(); this.openUpgrade('vista'); }
+      if (!save.seen[it.key]) { save.seen[it.key] = 1; save.discoveries = (save.discoveries || 0) + 1; this.journalRecord(it); storeSave(); this.openUpgrade('vista'); }
       else this.showRealization(choice(REALIZATIONS));
       return;
     }
   }
+  // Persist a discovered named place into the atlas journal (survives reloads).
+  journalRecord(it) {
+    if (!it || !it.name) return;
+    if (!save.journal) save.journal = {};
+    if (save.journal[it.key]) return;
+    save.journal[it.key] = { name: it.name, kind: it.kind || it.type, biome: this.world.biomeAt(it.pos.x, it.pos.z), dist: Math.round(Math.hypot(it.pos.x, it.pos.z)) };
+  }
   discoverPOI(it) {
-    save.seen[it.key] = 1; save.discoveries = (save.discoveries || 0) + 1; storeSave();
+    save.seen[it.key] = 1; save.discoveries = (save.discoveries || 0) + 1; this.journalRecord(it); storeSave();
     this.run.awe += 14;
     this.toast(`Discovered: ${it.name}`, 3.6);
     this.showRealization(it.note || choice(REALIZATIONS));
@@ -2245,15 +2341,16 @@ class Game {
   }
   spawnGuards(it) {
     const biome = this.world.biomeAt(it.pos.x, it.pos.z);
-    this.spawnEnemyAt('warden', it.pos.x, it.pos.z, biome);
     for (let i = 0; i < 3; i++) { const a = i / 3 * TAU; this.spawnEnemyAt(choice(BIOMES[biome].enemy), it.pos.x + Math.cos(a) * 6, it.pos.z + Math.sin(a) * 6, biome); }
+    if (this.enemies.some(e => e.boss && !e.dead)) return; // never more than one warden loose at once
+    this.spawnEnemyAt('warden', it.pos.x, it.pos.z, biome);
     this.toast(`A warden stirs at ${it.name}.`, 3.0);
   }
   openUpgrade(reason = 'vista') {
     if (this.mode !== 'play') return;
     this.mode = 'upgrade'; document.exitPointerLock?.(); setScreen(upgradeEl); hide(touchEl);
     const r = choice(REALIZATIONS);
-    upgradeTitle.textContent = reason === 'combat' ? 'You fought hard enough to understand something.' : 'The atlas hands you a better law.';
+    upgradeTitle.textContent = reason === 'boss' ? 'You unmade a guardian. The atlas pays its debts.' : reason === 'combat' ? 'You fought hard enough to understand something.' : 'The atlas hands you a better law.';
     upgradeText.textContent = r;
     const pool = UPGRADE_POOL.filter(u => (this.player.upgrades[u.id] || 0) < 5);
     const cards = [];
@@ -2386,6 +2483,8 @@ backToStartBtn.addEventListener('click', () => game.title());
 retryBtn.addEventListener('click', () => game.startRun());
 deathTitleBtn.addEventListener('click', () => game.title());
 resetBtn.addEventListener('click', () => { localStorage.removeItem(SAVE_KEY); save = loadSave(); game.updateSaveChip(); game.toast('Save reset. The atlas politely pretends it never saw you naked.'); });
+$('journalCloseBtn')?.addEventListener('click', () => game.closeJournal());
+$('pauseJournalBtn')?.addEventListener('click', () => game.toggleJournal());
 
 // Keep load screen visible until init either succeeds or the browser admits defeat.
 game.init().catch((err) => {
