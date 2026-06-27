@@ -116,27 +116,27 @@ function keyName(x, z, type, i = 0) { const [cx, cz] = worldChunk(x, z); return 
 
 const BIOMES = {
   meadow: {
-    label: 'hearth meadow', fog: 0x131225, sky: 0x0f1020, ground: [0x43516e, 0x7d6a9f, 0xe1b981],
+    label: 'hearth meadow', fog: 0x191538, sky: 0x141235, ground: [0x2e3a72, 0x6a52b8, 0xffd07a],
     accent: 0xffd36e, water: 0x6df6ff, enemy: ['mote', 'mote', 'sentinel']
   },
   city: {
-    label: 'luminous city', fog: 0x090922, sky: 0x080616, ground: [0x21213b, 0x293c55, 0x7d65b8],
+    label: 'luminous city', fog: 0x0e0c30, sky: 0x0c0a28, ground: [0x21213b, 0x2f4a82, 0x8a5cff],
     accent: 0x62f7ff, water: 0x37d3ff, enemy: ['sentinel', 'sentinel', 'mote', 'duelist']
   },
   desert: {
-    label: 'desert of soft knives', fog: 0x23160f, sky: 0x150d0d, ground: [0x8b6040, 0xd6a75d, 0xffdf93],
+    label: 'desert of soft knives', fog: 0x2a1a1e, sky: 0x1c1024, ground: [0x8b5440, 0xe0a85d, 0xffe09a],
     accent: 0xffd36e, water: 0x3fe8d4, enemy: ['mote', 'brute', 'duelist']
   },
   snow: {
-    label: 'nostalgic snow range', fog: 0x162133, sky: 0x08101f, ground: [0x7d9bb5, 0xd7e8ff, 0xffffff],
+    label: 'nostalgic snow range', fog: 0x1a2848, sky: 0x0c1436, ground: [0x6f9bd0, 0xd7e8ff, 0xffffff],
     accent: 0xbbe9ff, water: 0x8edcff, enemy: ['sentinel', 'brute', 'mote']
   },
   forest: {
-    label: 'wild velvet forest', fog: 0x07191b, sky: 0x061018, ground: [0x213445, 0x2f6c6c, 0x7bd7b1],
+    label: 'wild velvet forest', fog: 0x0c2138, sky: 0x0a1638, ground: [0x14305a, 0x1f8c7a, 0x6effc0],
     accent: 0x75ffb1, water: 0x5ef8ff, enemy: ['mote', 'duelist', 'mote']
   },
   coast: {
-    label: 'ocean-glass coast', fog: 0x07192b, sky: 0x07111f, ground: [0x2c516f, 0x6c8ca7, 0xffcf9b],
+    label: 'ocean-glass coast', fog: 0x0d2548, sky: 0x0b1838, ground: [0x123a78, 0x3a86c8, 0xffd7a0],
     accent: 0x62f7ff, water: 0x62f7ff, enemy: ['sentinel', 'mote', 'duelist']
   }
 };
@@ -673,7 +673,9 @@ class ChunkManager {
       terrain: new THREE.MeshStandardMaterial({ roughness: 0.9, metalness: 0.0, vertexColors: true }),
       road: mat(0x161725, { roughness: 0.84 }), concrete: mat(0x5c6278), dark: mat(0x101020), wall: mat(0x45506a), warmWall: mat(0x8b6e58), roof: mat(0x38203b), snowRoof: mat(0xe5f3ff),
       window: mat(0x7ff5ff, { emissive: 0x54eaff, emissiveIntensity: 1.9, roughness: 0.25 }), gold: mat(0xffd36e, { emissive: 0xd88c2b, emissiveIntensity: 0.8 }), pink: mat(0xff4fd8, { emissive: 0xff4fd8, emissiveIntensity: 1.35 }), cyan: mat(0x62f7ff, { emissive: 0x62f7ff, emissiveIntensity: 1.25 }),
-      violet: mat(0x9f74ff, { emissive: 0x6b44ff, emissiveIntensity: 0.85 }), leaf: mat(0x2f6c6c), trunk: mat(0x5b3c2c), sand: mat(0xd6a75d), snow: mat(0xd7e8ff), rock: mat(0x4d536c),
+      violet: mat(0x9f74ff, { emissive: 0x6b44ff, emissiveIntensity: 0.85 }), trunk: mat(0x5b3c2c), sand: mat(0xd6a75d), snow: mat(0xd7e8ff), rock: mat(0x4d536c),
+      // bioluminescent foliage — softly self-lit, in three alien hues
+      leaf: mat(0x2f8c7a, { emissive: 0x1f8c7a, emissiveIntensity: 0.3 }), leafBlue: mat(0x2f5a9c, { emissive: 0x2e6cff, emissiveIntensity: 0.28 }), leafViolet: mat(0x7a4dac, { emissive: 0x9a4dff, emissiveIntensity: 0.3 }),
       moon: mat(0xeef4ff, { emissive: 0xacc4f0, emissiveIntensity: 0.55, roughness: 0.95 }),
       // vibrant alien-planet palettes (body + contrasting ring), one signature per nature biome
       planets: [
@@ -958,7 +960,8 @@ class ChunkManager {
   addTree(ctx, lx, lz, s = 1) {
     const y = this.heightAt(ctx.ox + lx, ctx.oz + lz);
     ctx.addMesh(this.geos.cyl, this.mats.trunk, lx, y + 1.2 * s, lz, 0.35 * s, 2.4 * s, 0.35 * s, ctx.rng() * TAU);
-    ctx.addMesh(this.geos.sphere, this.mats.leaf, lx, y + 3.1 * s, lz, 1.8 * s, 1.25 * s, 1.8 * s, ctx.rng() * TAU);
+    const lm = [this.mats.leaf, this.mats.leaf, this.mats.leafBlue, this.mats.leafViolet][Math.floor(ctx.rng() * 4)];
+    ctx.addMesh(this.geos.sphere, lm, lx, y + 3.1 * s, lz, 1.8 * s, 1.25 * s, 1.8 * s, ctx.rng() * TAU);
   }
   addPine(ctx, lx, lz, s = 1) {
     const y = this.heightAt(ctx.ox + lx, ctx.oz + lz);
@@ -1015,7 +1018,8 @@ class ChunkManager {
   addLumenPool(ctx, lx, lz) {
     const y = this.heightAt(ctx.ox + lx, ctx.oz + lz);
     const r = 1.6 + ctx.rng() * 2.4;
-    ctx.addMesh(this.geos.cyl, this.mats.ember, lx, y + 0.12, lz, r, 0.2, r);
+    const glow = [this.mats.ember, this.mats.ember, this.mats.cyan, this.mats.pink][Math.floor(ctx.rng() * 4)]; // mostly amber, some cyan/magenta
+    ctx.addMesh(this.geos.cyl, glow, lx, y + 0.12, lz, r, 0.2, r);
     ctx.addMesh(this.geos.torus, this.mats.wall, lx, y + 0.22, lz, r * 1.08, r * 1.08, r * 1.08, 0, Math.PI / 2);
   }
   // Each biome gets its OWN giant, recognizable landmark so areas read as distinct places you
@@ -1173,7 +1177,7 @@ class Game {
     if (!hasWebGL()) { setScreen(webglError); return; }
     this.setLoad(0.1, 'opening WebGL…');
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !IS_TOUCH, powerPreference: 'high-performance' });
-    this.renderer.setClearColor(0x080713, 1);
+    this.renderer.setClearColor(0x0b0a26, 1);
     this.renderer.shadowMap.enabled = this.quality === 'high'; // medium had a shadow pass with almost no casters — pure cost
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -1184,7 +1188,7 @@ class Game {
     this.input = new InputState(this.player);
     this.setLoad(0.24, 'mixing sky colors…');
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x080713);
+    this.scene.background = new THREE.Color(0x0b0a26);
     this.scene.fog = new THREE.FogExp2(0x131225, 0.0042);
     const hemi = new THREE.HemisphereLight(0xdfeeff, 0x271827, 1.65); this.scene.add(hemi);
     this.sun = new THREE.DirectionalLight(0xffdfbb, 3.0); this.sun.position.set(80, 120, 40); this.sun.castShadow = this.quality === 'high';
@@ -1606,9 +1610,9 @@ class Game {
     const mesh = this.makeEnemyMesh(type, biome);
     mesh.position.set(x, y, z); mesh.scale.setScalar(0.01); this.scene.add(mesh);
     this.particles.spawn((this._spawnFx ||= new THREE.Vector3()).set(x, y, z), BIOMES[biome].accent, 12, 0.8);
-    const hp = type === 'brute' ? 110 : type === 'sentinel' ? 62 : type === 'duelist' ? 80 : 42;
+    const hp = type === 'brute' ? 80 : type === 'sentinel' ? 62 : type === 'duelist' ? 80 : 42;
     const fullHp = hp + this.run.distance * 0.01;
-    this.enemies.push({ type, biome, mesh, pos: mesh.position, vel: new THREE.Vector3(), hp: fullHp, maxHp: fullHp, radius: type === 'brute' ? 1.35 : type === 'sentinel' ? 0.85 : 0.75, fireCd: randRange(0.3, 1.8), hurt: 0, dead: false, slow: 0, phase: Math.random() * TAU, mat: mesh.userData.mat, baseEmissive: mesh.userData.mat.emissiveIntensity, emColor: mesh.userData.mat.emissive.clone(), flash: 0, bar: null, barTimer: 0, telegraph: 0, born: this.clock });
+    this.enemies.push({ type, biome, mesh, pos: mesh.position, vel: new THREE.Vector3(), hp: fullHp, maxHp: fullHp, radius: type === 'brute' ? 1.2 : type === 'sentinel' ? 0.85 : 0.75, fireCd: randRange(0.3, 1.8), hurt: 0, dead: false, slow: 0, phase: Math.random() * TAU, mat: mesh.userData.mat, baseEmissive: mesh.userData.mat.emissiveIntensity, emColor: mesh.userData.mat.emissive.clone(), flash: 0, bar: null, barTimer: 0, telegraph: 0, born: this.clock });
   }
   makeEnemyMesh(type, biome) {
     const info = BIOMES[biome];
@@ -1647,9 +1651,9 @@ class Game {
           this.fireProjectile(true, e.pos, shotDir);
         }
       } else if (e.type === 'brute') {
-        desired.addScaledVector(dir, d > 10 ? 7.2 : 2.2);
-        if (d < 4.2) e.telegraph = 1;
-        if (d < 2.1 && p.hurt(16, e.pos, this)) p.hp = 0;
+        desired.addScaledVector(dir, d > 10 ? 6.0 : 1.5); // slower, especially up close — kiteable now
+        if (d < 5.6) e.telegraph = 1;                     // telegraphs from farther so you can read it
+        if (d < 2.1 && p.hurt(10, e.pos, this)) p.hp = 0; // contact 16 -> 10
       } else if (e.type === 'duelist') {
         const tangent = (this._enemyTangent ||= new THREE.Vector3()).set(-dir.z, 0, dir.x).multiplyScalar(Math.sin(this.clock * 2.1 + e.phase));
         desired.addScaledVector(dir, d > 5 ? 11 : -3).addScaledVector(tangent, 4);
