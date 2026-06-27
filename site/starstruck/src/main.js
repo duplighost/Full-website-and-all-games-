@@ -117,7 +117,7 @@ function keyName(x, z, type, i = 0) { const [cx, cz] = worldChunk(x, z); return 
 const BIOMES = {
   meadow: {
     label: 'hearth meadow', fog: 0x191538, sky: 0x141235, ground: [0x2e3a72, 0x6a52b8, 0xffd07a],
-    accent: 0xffd36e, water: 0x6df6ff, enemy: ['mote', 'mote', 'sentinel']
+    accent: 0xffd36e, water: 0x6df6ff, enemy: ['mote', 'mote', 'wisp', 'sentinel']
   },
   city: {
     label: 'luminous city', fog: 0x0e0c30, sky: 0x0c0a28, ground: [0x21213b, 0x2f4a82, 0x8a5cff],
@@ -133,11 +133,11 @@ const BIOMES = {
   },
   forest: {
     label: 'wild velvet forest', fog: 0x0c2138, sky: 0x0a1638, ground: [0x14305a, 0x1f8c7a, 0x6effc0],
-    accent: 0x75ffb1, water: 0x5ef8ff, enemy: ['mote', 'duelist', 'mote']
+    accent: 0x75ffb1, water: 0x5ef8ff, enemy: ['mote', 'duelist', 'wisp', 'wisp']
   },
   coast: {
     label: 'ocean-glass coast', fog: 0x0d2548, sky: 0x0b1838, ground: [0x123a78, 0x3a86c8, 0xffd7a0],
-    accent: 0x62f7ff, water: 0x62f7ff, enemy: ['sentinel', 'mote', 'duelist']
+    accent: 0x62f7ff, water: 0x62f7ff, enemy: ['sentinel', 'mote', 'wisp', 'duelist']
   }
 };
 
@@ -921,6 +921,7 @@ class ChunkManager {
   genForest(ctx) {
     for (let i = 0; i < 34; i++) this.addTree(ctx, randCell(ctx.rng), randCell(ctx.rng), randRangeR(ctx.rng, 0.8, 1.9));
     for (let i = 0; i < 10; i++) this.addRock(ctx, randCell(ctx.rng), randCell(ctx.rng), randRangeR(ctx.rng, 0.8, 2.1));
+    for (let i = 0; i < 2; i++) if (ctx.rng() > 0.55) this.addColumn(ctx, randCell(ctx.rng), randCell(ctx.rng));
     for (let i = 0; i < 8; i++) this.addCrystal(ctx, randCell(ctx.rng), randCell(ctx.rng), 0x75ffb1, randRangeR(ctx.rng, 0.4, 0.9));
     for (let i = 0; i < 3; i++) if (ctx.rng() > 0.45) this.addPod(ctx, randCell(ctx.rng), randCell(ctx.rng), 0x75ffb1);
     for (let i = 0; i < 5; i++) if (ctx.rng() > 0.45) this.addLumenPool(ctx, randCell(ctx.rng), randCell(ctx.rng));
@@ -944,6 +945,7 @@ class ChunkManager {
   genSnow(ctx) {
     for (let i = 0; i < 22; i++) this.addPine(ctx, randCell(ctx.rng), randCell(ctx.rng), randRangeR(ctx.rng, 0.9, 1.8));
     for (let i = 0; i < 12; i++) this.addRock(ctx, randCell(ctx.rng), randCell(ctx.rng), randRangeR(ctx.rng, 1.2, 3.6));
+    for (let i = 0; i < 2; i++) if (ctx.rng() > 0.6) this.addColumn(ctx, randCell(ctx.rng), randCell(ctx.rng));
     for (let i = 0; i < 7; i++) this.addCrystal(ctx, randCell(ctx.rng), randCell(ctx.rng), 0xbbe9ff, randRangeR(ctx.rng, 0.5, 1.0));
     for (let i = 0; i < 2; i++) if (ctx.rng() > 0.5) this.addPod(ctx, randCell(ctx.rng), randCell(ctx.rng), 0x62f7ff);
     this.addRail(ctx, new THREE.Vector3(ctx.ox - 40, this.heightAt(ctx.ox - 40, ctx.oz - 26) + 0.6, ctx.oz - 26), new THREE.Vector3(ctx.ox + 40, this.heightAt(ctx.ox + 40, ctx.oz + 26) + 2.4, ctx.oz + 26), 0xbbe9ff);
@@ -952,6 +954,7 @@ class ChunkManager {
     this.addWater(ctx, 0, 18, 34, true);
     for (let i = 0; i < 16; i++) this.addPalm(ctx, randCell(ctx.rng), randCell(ctx.rng));
     for (let i = 0; i < 10; i++) this.addRock(ctx, randCell(ctx.rng), randCell(ctx.rng), randRangeR(ctx.rng, 0.7, 2));
+    for (let i = 0; i < 2; i++) if (ctx.rng() > 0.55) this.addColumn(ctx, randCell(ctx.rng), randCell(ctx.rng));
     for (let i = 0; i < 6; i++) this.addCrystal(ctx, randCell(ctx.rng), randCell(ctx.rng), 0x62f7ff, randRangeR(ctx.rng, 0.4, 0.9));
     for (let i = 0; i < 2; i++) if (ctx.rng() > 0.5) this.addPod(ctx, randCell(ctx.rng), randCell(ctx.rng), 0x62f7ff);
     for (let i = 0; i < 6; i++) if (ctx.rng() > 0.4) this.addLumenPool(ctx, randCell(ctx.rng), randCell(ctx.rng));
@@ -1022,6 +1025,22 @@ class ChunkManager {
     ctx.addMesh(this.geos.cyl, glow, lx, y + 0.12, lz, r, 0.2, r);
     ctx.addMesh(this.geos.torus, this.mats.wall, lx, y + 0.22, lz, r * 1.08, r * 1.08, r * 1.08, 0, Math.PI / 2);
   }
+  // Twisty luminous rock column — stacked, slightly-offset segments with a glowing crown,
+  // like the bioluminescent pillars of an alien valley.
+  addColumn(ctx, lx, lz) {
+    const y = this.heightAt(ctx.ox + lx, ctx.oz + lz);
+    const segs = 4 + Math.floor(ctx.rng() * 3);
+    const baseR = 0.7 + ctx.rng() * 0.6;
+    const crown = [this.mats.cyan, this.mats.pink, this.mats.violet, this.mats.ember][Math.floor(ctx.rng() * 4)];
+    let yy = y, rot = ctx.rng() * TAU, ox = 0, oz = 0;
+    for (let i = 0; i < segs; i++) {
+      const h = 2.4 + ctx.rng() * 1.6, r = baseR * (1 - i / segs * 0.45);
+      rot += (ctx.rng() - 0.5) * 1.4; ox += Math.cos(rot) * 0.5; oz += Math.sin(rot) * 0.5;
+      ctx.addMesh(this.geos.cyl, this.mats.rock, lx + ox, yy + h / 2, lz + oz, r, h, r, rot);
+      yy += h * 0.9;
+    }
+    ctx.addMesh(this.geos.sphere, crown, lx + ox, yy, lz + oz, baseR * 0.7, baseR * 0.7, baseR * 0.7);
+  }
   // Each biome gets its OWN giant, recognizable landmark so areas read as distinct places you
   // can navigate by — led by the Hung Moon (a huge glowing sphere on cables) over the open
   // meadows/coasts, like the reference. They're big and emissive so you spot them from afar.
@@ -1032,10 +1051,13 @@ class ChunkManager {
     let label;
     if (b === 'coast') { this.landmarkMoon(ctx, lx, lz, y0); label = 'the Hung Moon'; }
     else if (b === 'city') { this.landmarkSpire(ctx, lx, lz, y0); label = 'the Beacon'; }
-    else { // a vibrant alien planet, one signature colour per biome so you recognise the area on sight
+    else { // a vibrant alien sky object — biome sets the signature colour, a roll picks the kind
       const pi = b === 'forest' ? 1 : b === 'desert' ? 2 : b === 'snow' ? 3 : 0;
-      this.landmarkPlanet(ctx, lx, lz, y0, pi);
-      label = ['the Verdant World', 'the Violet Wanderer', 'the Ember Giant', 'the Rose World'][pi];
+      const roll = ctx.rng();
+      if (roll < 0.48) { this.landmarkPlanet(ctx, lx, lz, y0, pi); label = ['the Verdant World', 'the Violet Wanderer', 'the Ember Giant', 'the Rose World'][pi]; }
+      else if (roll < 0.7) { this.landmarkGasGiant(ctx, lx, lz, y0, pi); label = 'a banded gas giant'; }
+      else if (roll < 0.86) { this.landmarkTwinMoons(ctx, lx, lz, y0); label = 'the Twin Moons'; }
+      else { this.landmarkAurora(ctx, lx, lz, y0, pi); label = 'a sky aurora'; }
     }
     const key = keyName(wx, wz, 'vista', ctx.id);
     ctx.interactables.push({ type: 'vista', key, pos: new THREE.Vector3(wx, y0 + 1.2, wz), radius: 6.4, label: save.seen[key] ? `return to ${label}` : `steal a realization at ${label}`, used: !!save.seen[key] });
@@ -1063,6 +1085,27 @@ class ChunkManager {
     const ma = ctx.rng() * TAU, md = rr + 2.5;     // a tiny orbiting moonlet
     ctx.addMesh(this.geos.sphere, this.mats.moon, lx + Math.cos(ma) * md, py + 1.5, lz + Math.sin(ma) * md, 1.5, 1.5, 1.5);
     ctx.addLight?.(pal.accent, 2.8, 70, 1.6, lx, py, lz);
+  }
+  landmarkGasGiant(ctx, lx, lz, y0, pi) {
+    const pal = this.mats.planets[pi % this.mats.planets.length];
+    const py = y0 + 30 + ctx.rng() * 10, R = 11 + ctx.rng() * 3;
+    ctx.addMesh(this.geos.sphere, pal.body, lx, py, lz, R, R, R, ctx.rng() * TAU);
+    for (let i = 0; i < 3; i++) { const t = (i - 1) * 0.42, br = Math.sqrt(Math.max(0.05, 1 - t * t)) * R * 1.02; ctx.addMesh(this.geos.torus, pal.ring, lx, py + t * R, lz, br, br, br * 0.5, 0, Math.PI / 2); } // latitude bands
+    const rr = R * 1.9; ctx.addMesh(this.geos.torus, pal.ring, lx, py, lz, rr, rr, rr, ctx.rng() * TAU, 1.1); // wide ring
+    ctx.addLight?.(pal.accent, 3.0, 85, 1.5, lx, py, lz);
+  }
+  landmarkTwinMoons(ctx, lx, lz, y0) {
+    const py = y0 + 30 + ctx.rng() * 8;
+    ctx.addMesh(this.geos.sphere, this.mats.moon, lx - 6, py, lz, 8, 8, 8);
+    ctx.addMesh(this.geos.sphere, this.mats.planets[3].body, lx + 7, py + 4, lz - 3, 5, 5, 5); // a smaller rose companion
+    ctx.addLight?.(0xbcd2ff, 2.6, 100, 1.6, lx, py, lz);
+  }
+  landmarkAurora(ctx, lx, lz, y0, pi) {
+    const pal = this.mats.planets[pi % this.mats.planets.length];
+    const py = y0 + 40 + ctx.rng() * 12, R = 26 + ctx.rng() * 10;
+    ctx.addMesh(this.geos.torus, pal.ring, lx, py, lz, R, R * 0.5, R, ctx.rng() * TAU, 1.35);          // shimmering arc
+    ctx.addMesh(this.geos.torus, this.mats.cyan, lx, py + 2, lz, R * 0.78, R * 0.78 * 0.5, R * 0.78, ctx.rng() * TAU, 1.4);
+    ctx.addLight?.(pal.accent, 2.4, 120, 1.2, lx, py, lz);
   }
   addHome(ctx) {
     const lx = randRangeR(ctx.rng, -28, 28), lz = randRangeR(ctx.rng, -28, 28);
@@ -1199,6 +1242,7 @@ class Game {
     this.floaters = new FloatingText(dmgLayer, this.camera, this.quality === 'low' ? 36 : 64);
     this.addStarfield();
     this.makeShared();
+    this.makeMotes();
     this.world.update(this.player.pos, 1, 4.5);
     this.player.setSolids(this.world.collectSolids(this.player.pos.x, this.player.pos.z, this.solids));
     this.setLoad(0.72, 'teaching enemies to resent beauty…');
@@ -1391,6 +1435,7 @@ class Game {
     this.updateDestructibles(dt);
     this.handleInteractions(dt);
     this.particles.update(dt);
+    this.updateMotes(dt);
     this.floaters.update(dt);
     this.updateEnvironment(dt);
     this.updateFeedback(dt);
@@ -1449,6 +1494,33 @@ class Game {
     if (low !== this.lowHp) { this.lowHp = low; lowHpVignette.classList.toggle('active', low); healthMeterEl?.classList.toggle('low', low); }
     // muzzle flash fade
     if (this.muzzleT > 0) { this.muzzleT -= dt; this.muzzleFlash.material.opacity = Math.max(0, this.muzzleFlash.material.opacity - dt * 14); }
+  }
+  // Drifting ambient glow motes — a cheap THREE.Points cloud that bobs around the player and
+  // wraps to stay near them, so the air always shimmers with bioluminescent spores.
+  makeMotes() {
+    const N = this.quality === 'low' ? 28 : this.quality === 'medium' ? 56 : 84;
+    const pos = new Float32Array(N * 3);
+    this.moteData = [];
+    for (let i = 0; i < N; i++) {
+      pos[i * 3] = randRange(-58, 58); pos[i * 3 + 1] = randRange(0.6, 22); pos[i * 3 + 2] = randRange(-58, 58);
+      this.moteData.push({ phase: Math.random() * TAU, sp: randRange(0.3, 0.8) });
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const m = new THREE.PointsMaterial({ color: 0xbff0ff, size: 0.42, transparent: true, opacity: 0.85, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true });
+    this.motes = new THREE.Points(g, m); this.motes.frustumCulled = false; this.scene.add(this.motes);
+  }
+  updateMotes(dt) {
+    if (!this.motes) return;
+    const arr = this.motes.geometry.attributes.position.array, px = this.player.pos.x, pz = this.player.pos.z;
+    for (let i = 0; i < this.moteData.length; i++) {
+      const d = this.moteData[i], j = i * 3; d.phase += dt * d.sp;
+      arr[j] += Math.sin(d.phase) * dt * 0.7; arr[j + 1] += Math.cos(d.phase * 0.7) * dt * 0.5; arr[j + 2] += Math.cos(d.phase) * dt * 0.7;
+      if (arr[j] - px > 58) arr[j] -= 116; else if (arr[j] - px < -58) arr[j] += 116;
+      if (arr[j + 2] - pz > 58) arr[j + 2] -= 116; else if (arr[j + 2] - pz < -58) arr[j + 2] += 116;
+      if (arr[j + 1] > 24) arr[j + 1] = 0.6; else if (arr[j + 1] < 0.4) arr[j + 1] = 24;
+    }
+    this.motes.geometry.attributes.position.needsUpdate = true;
   }
   applyRailAssist(dt) {
     const active = this.nearActive || this.world.activeNear(this.player.pos.x, this.player.pos.z);
@@ -1606,18 +1678,18 @@ class Game {
     const x = p.x + Math.cos(angle) * dist, z = p.z + Math.sin(angle) * dist;
     const biome = this.world.biomeAt(x, z);
     const type = choice(BIOMES[biome].enemy);
-    const y = this.world.heightAt(x, z) + (type === 'sentinel' ? 4.5 : type === 'duelist' ? 1.4 : 1.0);
+    const y = this.world.heightAt(x, z) + (type === 'sentinel' ? 4.5 : type === 'duelist' ? 1.4 : type === 'wisp' ? 1.8 : 1.0);
     const mesh = this.makeEnemyMesh(type, biome);
     mesh.position.set(x, y, z); mesh.scale.setScalar(0.01); this.scene.add(mesh);
     this.particles.spawn((this._spawnFx ||= new THREE.Vector3()).set(x, y, z), BIOMES[biome].accent, 12, 0.8);
-    const hp = type === 'brute' ? 80 : type === 'sentinel' ? 62 : type === 'duelist' ? 80 : 42;
+    const hp = type === 'brute' ? 80 : type === 'sentinel' ? 62 : type === 'duelist' ? 80 : type === 'wisp' ? 26 : 42;
     const fullHp = hp + this.run.distance * 0.01;
-    this.enemies.push({ type, biome, mesh, pos: mesh.position, vel: new THREE.Vector3(), hp: fullHp, maxHp: fullHp, radius: type === 'brute' ? 1.2 : type === 'sentinel' ? 0.85 : 0.75, fireCd: randRange(0.3, 1.8), hurt: 0, dead: false, slow: 0, phase: Math.random() * TAU, mat: mesh.userData.mat, baseEmissive: mesh.userData.mat.emissiveIntensity, emColor: mesh.userData.mat.emissive.clone(), flash: 0, bar: null, barTimer: 0, telegraph: 0, born: this.clock });
+    this.enemies.push({ type, biome, mesh, pos: mesh.position, vel: new THREE.Vector3(), hp: fullHp, maxHp: fullHp, radius: type === 'brute' ? 1.2 : type === 'sentinel' ? 0.85 : type === 'wisp' ? 0.55 : 0.75, fireCd: randRange(0.3, 1.8), hurt: 0, dead: false, slow: 0, phase: Math.random() * TAU, mat: mesh.userData.mat, baseEmissive: mesh.userData.mat.emissiveIntensity, emColor: mesh.userData.mat.emissive.clone(), flash: 0, bar: null, barTimer: 0, telegraph: 0, born: this.clock });
   }
   makeEnemyMesh(type, biome) {
     const info = BIOMES[biome];
     const group = new THREE.Group();
-    const color = type === 'brute' ? 0xff725d : type === 'sentinel' ? info.accent : type === 'duelist' ? 0xff4fd8 : 0xffffff;
+    const color = type === 'brute' ? 0xff725d : type === 'sentinel' ? info.accent : type === 'duelist' ? 0xff4fd8 : type === 'wisp' ? 0x9affd8 : 0xffffff;
     const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: type === 'mote' ? 0.9 : 1.35, roughness: 0.36, metalness: 0.05 });
     const dark = this.enemyDarkMat; // shared (the per-enemy animated material is `mat`, kept per-instance)
     const body = new THREE.Mesh(type === 'brute' ? this.enemyGeos.brute : this.enemyGeos.body, mat); group.add(body);
@@ -1659,6 +1731,11 @@ class Game {
         desired.addScaledVector(dir, d > 5 ? 11 : -3).addScaledVector(tangent, 4);
         if (d < 4) e.telegraph = 1;
         if (d < 2.3 && p.hurt(12, e.pos, this)) p.hp = 0;
+      } else if (e.type === 'wisp') {
+        const weave = (this._enemyTangent ||= new THREE.Vector3()).set(-dir.z, 0, dir.x).multiplyScalar(Math.sin(this.clock * 3.4 + e.phase));
+        desired.addScaledVector(dir, 13.5).addScaledVector(weave, 7.5); // fast + erratic
+        if (d < 2.2) e.telegraph = 1;
+        if (d < 1.35 && p.hurt(6, e.pos, this)) p.hp = 0;
       } else {
         desired.addScaledVector(dir, 12.5);
         if (d < 3) e.telegraph = 1;
