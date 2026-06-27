@@ -208,12 +208,27 @@ const RELIC_BOONS = {
   cathedral:   { name: 'the Cathedral Choir',    color: 0x9f74ff, effect: 'Your surge heals you and erupts wider and harder.', apply: p => { p.surgeHeal += 26; p.surgeRadius += 3; p.surgeDamage += 16; } }
 };
 
+// Each boss drops its own unique relic on death — bigger, build-defining boons.
+const BOSS_RELICS = {
+  warden: { name: "the Warden's Heart",  color: 0xff3b5e, effect: '+50 max health and a searing aura that burns anything close.', apply: p => { p.maxHp += 50; p.hp += 50; p.thorns += 16; } },
+  seraph: { name: "the Seraph's Feather", color: 0xff8fd0, effect: 'A third jump, a longer glide, and a gentler fall.', apply: p => { p.glide = true; p.doubleJump = true; p.extraJump += 1; p.gravity *= 0.9; } },
+  maw:    { name: "the Maw's Tongue",     color: 0x9f74ff, effect: 'Kills bleed health back, and your surge drags enemies in before it bites.', apply: p => { p.lifesteal += 8; p.surgePull += 1; p.surgeRadius += 2; } }
+};
+
 
 for (const info of Object.values(BIOMES)) {
   info._fogColor = new THREE.Color(info.fog);
   info._skyColor = new THREE.Color(info.sky);
   info._groundColors = info.ground.map(c => new THREE.Color(c));
 }
+
+// Drifting weather moods — each nudges fog, sky tint, and ambient particles for atmosphere.
+const WEATHER = [
+  { id: 'clear',  label: 'the air goes clear',         fog: 0.82, tint: null },
+  { id: 'mist',   label: 'a low mist settles in',      fog: 1.85, tint: 0x33405e },
+  { id: 'ember',  label: 'emberfall drifts down',      fog: 1.05, tint: 0x3a2014, ember: 0xff8a3d },
+  { id: 'aurora', label: 'an aurora unrolls overhead', fog: 0.8,  tint: 0x123a52 }
+];
 
 const START_HINTS = [
   'Follow glow. Break crystals. Enter warmth.',
@@ -307,9 +322,9 @@ function hasWebGL() {
 
 function loadSave() {
   try {
-    return Object.assign({ best: 0, runs: 0, totalAwe: 0, discoveries: 0, echoes: 0, seen: {}, journal: {}, quality: null }, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}'));
+    return Object.assign({ best: 0, runs: 0, totalAwe: 0, discoveries: 0, echoes: 0, seen: {}, journal: {}, lore: [], quality: null }, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}'));
   } catch (_) {
-    return { best: 0, runs: 0, totalAwe: 0, discoveries: 0, echoes: 0, seen: {}, journal: {}, quality: null };
+    return { best: 0, runs: 0, totalAwe: 0, discoveries: 0, echoes: 0, seen: {}, journal: {}, lore: [], quality: null };
   }
 }
 function storeSave() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (_) {} }
@@ -503,6 +518,8 @@ class Player {
     this.chain = 0; this.homing = 0; this.slam = 0; this.timeDodge = 0; this.lifesteal = 0; this.revive = 0; this.usedRevive = false;
     // relic boon hooks
     this.jumpVel = 9.2; this.energyRegen = 1; this.regen = 0; this.aweMul = 0; this.pierce = 0; this.surgeHeal = 0;
+    // boss-relic hooks
+    this.thorns = 0; this.extraJump = 0; this.surgePull = 0;
     this.upgrades = Object.fromEntries(UPGRADE_POOL.map(u => [u.id, 0]));
     this.solids = [];
     this.forward = new THREE.Vector3();
@@ -551,7 +568,7 @@ class Player {
 
     const wantsJump = input.consumeJump();
     if (wantsJump) {
-      if (this.onGround || this.jumps < (this.doubleJump ? 2 : 1)) {
+      if (this.onGround || this.jumps < (this.doubleJump ? 2 : 1) + this.extraJump) {
         this.vel.y = this.onGround ? this.jumpVel : this.jumpVel - 1.0;
         this.onGround = false;
         this.jumps++;
@@ -1579,6 +1596,7 @@ class Game {
     this.autoFireCd = 0;
     this.hazards = [];           // active AoE ground hazards (the Maw)
     this.runFound = []; this.runRelics = []; this.runEchoes = 0;
+    this.weatherIdx = 0; this.weatherTimer = 45; this.todPhase = 0.28; this._todWord = 'day';
   }
   async init() {
     if (!hasWebGL()) { setScreen(webglError); return; }
@@ -1597,7 +1615,8 @@ class Game {
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x0b0a26);
     this.scene.fog = new THREE.FogExp2(0x131225, 0.0042);
-    const hemi = new THREE.HemisphereLight(0xdfeeff, 0x271827, 1.65); this.scene.add(hemi);
+    this.hemi = new THREE.HemisphereLight(0xdfeeff, 0x271827, 1.65); this.scene.add(this.hemi);
+    this.hemiBase = 1.65; this.sunBase = 3.0;
     this.sun = new THREE.DirectionalLight(0xffdfbb, 3.0); this.sun.position.set(80, 120, 40); this.sun.castShadow = this.quality === 'high';
     this.sun.shadow.mapSize.set(this.quality === 'high' ? 768 : 512, this.quality === 'high' ? 768 : 512); this.sun.shadow.camera.near = 1; this.sun.shadow.camera.far = 360; this.sun.shadow.camera.left = -120; this.sun.shadow.camera.right = 120; this.sun.shadow.camera.top = 120; this.sun.shadow.camera.bottom = -120; this.scene.add(this.sun);
     this.setLoad(0.42, 'folding roads into meadows…');
@@ -1802,13 +1821,22 @@ class Game {
   }
   renderJournal() {
     const entries = Object.values(save.journal || {}).sort((a, b) => a.dist - b.dist);
-    journalSummary.textContent = entries.length
-      ? `${entries.length} named place${entries.length === 1 ? '' : 's'} logged · ${save.discoveries || 0} wonders stolen · ${save.echoes || 0} echoes heard`
+    const lore = (save.lore || []).slice().sort((a, b) => a.dist - b.dist);
+    journalSummary.textContent = entries.length || lore.length
+      ? `${entries.length} place${entries.length === 1 ? '' : 's'} · ${save.discoveries || 0} wonders · ${save.echoes || 0} echoes heard across all runs`
       : 'Nothing logged yet. Wander out and let some glow introduce itself.';
-    const icon = (k) => k === 'poi' || POI_DEFS[k] ? '◆' : '✦';
-    journalList.innerHTML = entries.length
-      ? entries.map(e => `<div class="journal-row"><span class="j-icon">${icon(e.kind)}</span><span class="j-name">${e.name}</span><span class="j-meta">${BIOMES[e.biome]?.label || e.biome || ''} · ${e.dist}m out</span></div>`).join('')
-      : '<p class="tiny">—</p>';
+    const tab = this._journalTab || 'places';
+    document.querySelectorAll('#journalTabs button').forEach(b => b.classList.toggle('selected', b.dataset.tab === tab));
+    if (tab === 'echoes') {
+      journalList.innerHTML = lore.length
+        ? lore.map(l => `<div class="lore-row"><p class="lore-text">“${l.note}”</p><span class="j-meta">${BIOMES[l.biome]?.label || l.biome || ''} · ${l.dist}m out</span></div>`).join('')
+        : '<p class="tiny">No echoes heard yet. Look for the small teal wisps over abandoned things.</p>';
+    } else {
+      const icon = (k) => k === 'poi' || POI_DEFS[k] ? '◆' : k === 'relic' ? '✶' : '✦';
+      journalList.innerHTML = entries.length
+        ? entries.map(e => `<div class="journal-row"><span class="j-icon">${icon(e.kind)}</span><span class="j-name">${e.name}</span><span class="j-meta">${BIOMES[e.biome]?.label || e.biome || ''} · ${e.dist}m out</span></div>`).join('')
+        : '<p class="tiny">—</p>';
+    }
   }
   die() {
     this.mode = 'death'; document.exitPointerLock?.();
@@ -1866,6 +1894,8 @@ class Game {
     this.updateHud(dt);
     this.run.distance = Math.max(this.run.distance, Math.hypot(p.pos.x, p.pos.z));
     if (p.regen > 0 && p.hp < p.maxHp && this.clock - this._lastCombat > 4) p.hp = Math.min(p.maxHp, p.hp + p.regen * dt); // Lantern Ember: mend out of combat
+    // Warden's Heart: a searing aura that burns anything that gets close
+    if (p.thorns > 0) for (const e of this.enemies) { if (e.dead) continue; const dx = e.pos.x - p.pos.x, dy = e.pos.y - p.pos.y, dz = e.pos.z - p.pos.z; if (dx * dx + dy * dy + dz * dz < 7.3) this.damageEnemy(e, p.thorns * dt, p.pos, 0xff6a55, { tick: true }); }
     this.run.comboTimer = Math.max(0, this.run.comboTimer - dt);
     if (this.run.comboTimer <= 0) this.run.combo = Math.max(0, this.run.combo - dt * 1.5);
     if (p.hp <= 0) { if (p.revive > 0 && !p.usedRevive) this.triggerRevive(); else this.die(); }
@@ -1934,10 +1964,26 @@ class Game {
   updateEnvironment(dt) {
     const b = this.world.biomeAt(this.player.pos.x, this.player.pos.z);
     const info = BIOMES[b];
+    // ---- weather + time-of-day ----
+    this.weatherTimer -= dt;
+    if (this.weatherTimer <= 0) {
+      this.weatherTimer = randRange(42, 82);
+      this.weatherIdx = (this.weatherIdx + 1 + Math.floor(Math.random() * (WEATHER.length - 1))) % WEATHER.length;
+      this.toast(WEATHER[this.weatherIdx].label + '.', 2.6);
+    }
+    const w = WEATHER[this.weatherIdx];
+    this.todPhase = (this.todPhase + dt / 240) % 1;                 // a 4-minute day
+    const day = 0.5 + 0.5 * Math.sin(this.todPhase * TAU), night = 1 - day;
+    this._todWord = day > 0.7 ? 'day' : day > 0.36 ? 'twilight' : 'night';
+    this.hemi.intensity = lerp(this.hemi.intensity, this.hemiBase * (0.34 + 0.66 * day), dt);
+    this.sun.intensity = lerp(this.sun.intensity, this.sunBase * (0.14 + 0.86 * day), dt);
     this.scene.fog.color.lerp(info._fogColor, dt * 1.2);
     this.scene.background.lerp(info._skyColor, dt * 0.9);
+    if (w.tint) { (this._wTint ||= new THREE.Color()).setHex(w.tint); this.scene.background.lerp(this._wTint, dt * 0.25); this.scene.fog.color.lerp(this._wTint, dt * 0.3); }
+    if (night > 0.04) { (this._nightCol ||= new THREE.Color(0x05040e)); this.scene.background.lerp(this._nightCol, night * dt * 0.4); }
+    if (w.ember && Math.random() < dt * 16) { const ex = this.player.pos.x + randRange(-32, 32), ez = this.player.pos.z + randRange(-32, 32), ey = this.world.heightAt(ex, ez) + randRange(7, 20); this.particles.spawn((this._embFx ||= new THREE.Vector3()).set(ex, ey, ez), w.ember, 1, 0.32, (this._embDir ||= new THREE.Vector3(0, -1, 0))); }
     const dist = Math.hypot(this.player.pos.x, this.player.pos.z);
-    this.scene.fog.density = lerp(this.scene.fog.density, clamp(0.0042 - this.player.viewBonus * 0.000006 + dist * 0.00000055, this.quality === 'high' ? 0.0018 : 0.0034, 0.0075), dt * 0.7);
+    this.scene.fog.density = lerp(this.scene.fog.density, clamp((0.0042 - this.player.viewBonus * 0.000006 + dist * 0.00000055) * w.fog, this.quality === 'high' ? 0.0018 : 0.0034, 0.0088), dt * 0.7);
     const sunA = this.clock * 0.025 + dist * 0.0007;
     this.sun.position.set(Math.cos(sunA) * 120, 90 + Math.sin(sunA * 0.47) * 30, Math.sin(sunA) * 120);
     this.audio.update(b, Math.hypot(this.player.vel.x, this.player.vel.z), dt);
@@ -2157,6 +2203,8 @@ class Game {
   }
   surge() {
     const p = this.player; let hit = 0;
+    // Maw's Tongue: drag nearby enemies into the blast before it lands
+    if (p.surgePull > 0) for (const e of this.enemies) { if (e.dead) continue; const to = (this._surgePullV ||= new THREE.Vector3()).copy(p.pos).sub(e.pos).setY(0); const dd = to.length(); if (dd < p.surgeRadius + 7 && dd > 0.1) e.vel.addScaledVector(to.multiplyScalar(1 / dd), 24); }
     for (const e of this.enemies) if (!e.dead && e.pos.distanceTo(p.pos) < p.surgeRadius + e.radius) { this.damageEnemy(e, p.surgeDamage, p.pos, 0xbbe9ff, { crit: true }); e.slow = Math.max(e.slow, 1.6); hit++; }
     // also shatter nearby destructibles caught in the blast
     for (const dst of this.destructibles) if (!dst.dead && dst.pos.distanceTo(p.pos) < p.surgeRadius + dst.radius) this.breakDestructible(dst, p.pos);
@@ -2476,9 +2524,18 @@ class Game {
       this.particles.spawn(e.pos, 0xffd36e, 80, 2.4); this.particles.spawn(e.pos, 0xffffff, 30, 1.4);
       this.shake = Math.max(this.shake, 0.9); this.hitStop = Math.max(this.hitStop, 0.1);
       const bn = (BOSS_NAMES[e.type] || 'THE GUARDIAN').replace('THE ', 'The ');
-      this.toast(`${bn} folds. The atlas owes you something for that.`, 3.2);
+      this.toast(`${bn} folds. It leaves something behind.`, 3.2);
+      this.dropBossRelic(e);
       this.openUpgrade('boss');
     }
+  }
+  dropBossRelic(boss) {
+    const def = BOSS_RELICS[boss.type]; if (!def) return;
+    const mat = this.pickupMaterial('bossrelic', def.color);
+    const mesh = new THREE.Mesh(this.pickupGeos.awe, mat); mesh.scale.setScalar(2.4);
+    mesh.position.set(boss.pos.x, boss.pos.y + 1.3, boss.pos.z); this.scene.add(mesh);
+    this.pickups.push({ mesh, type: 'relic', value: 1, vel: new THREE.Vector3(0, 4.5, 0), life: 120, color: def.color, shared: true, relicDef: def });
+    this.particles.spawn(mesh.position, def.color, 30, 1.4);
   }
   pickupMaterial(type, color) {
     const key = `${type}:${color}`;
@@ -2514,6 +2571,18 @@ class Game {
     for (let i = this.pickups.length - 1; i >= 0; i--) if (this.pickups[i].life <= 0) { const pk = this.pickups[i]; this.scene.remove(pk.mesh); if (!pk.shared) { pk.mesh.geometry.dispose(); pk.mesh.material.dispose(); } this.pickups.splice(i, 1); }
   }
   collectPickup(pk) {
+    if (pk.type === 'relic' && pk.relicDef) {
+      pk.relicDef.apply(this.player);
+      this.runRelics.push(pk.relicDef.name);
+      if (!save.journal) save.journal = {};
+      const jk = 'bossrelic:' + pk.relicDef.name;
+      if (!save.journal[jk]) save.journal[jk] = { name: pk.relicDef.name, kind: 'relic', biome: this.world.biomeAt(this.player.pos.x, this.player.pos.z), dist: Math.round(Math.hypot(this.player.pos.x, this.player.pos.z)) };
+      storeSave();
+      this.toast(`Claimed ${pk.relicDef.name} — ${pk.relicDef.effect}`, 4.8);
+      this.showRealization(pk.relicDef.effect); this.audio.upgrade(); this.shake = Math.max(this.shake, 0.4);
+      this.particles.spawn(pk.mesh.position, pk.color, 60, 2.0);
+      return;
+    }
     if (pk.type === 'heart') { this.player.hp = Math.min(this.player.maxHp, this.player.hp + 16); this.floaters?.spawn(pk.mesh.position, '+16', 'heal'); }
     else if (pk.type === 'energy') { this.player.energy = Math.min(this.player.maxEnergy, this.player.energy + 24); this.floaters?.spawn(pk.mesh.position, '+EN', 'dest'); }
     else { const v = pk.value * (1 + this.player.aweMul); this.run.awe += v; this.run.xp += v * (1 + this.run.combo * 0.04); }
@@ -2567,7 +2636,10 @@ class Game {
       // Echoes: fragments of someone else's story that surface, one at a time, as you wander near.
       if (it.type === 'echo') {
         if (!save.seen[it.key] && d < it.radius && this._echoCd <= 0) {
-          save.seen[it.key] = 1; save.echoes = (save.echoes || 0) + 1; this.runEchoes++; storeSave();
+          save.seen[it.key] = 1; save.echoes = (save.echoes || 0) + 1; this.runEchoes++;
+          if (!save.lore) save.lore = [];
+          if (!save.lore.some(l => l.note === it.note)) save.lore.push({ note: it.note, kind: it.kind, biome: this.world.biomeAt(it.pos.x, it.pos.z), dist: Math.round(Math.hypot(it.pos.x, it.pos.z)) });
+          storeSave();
           this._echoCd = 7;
           this.showRealization(it.note); this.audio.tone(430, 0.18, 'sine', 0.03, 1.4);
         }
@@ -2699,7 +2771,7 @@ class Game {
     else this._ghostPct = hpPct;
     if (hpGhost) hpGhost.style.width = `${this._ghostPct}%`;
     energyFill.style.width = `${clamp(p.energy / p.maxEnergy, 0, 1) * 100}%`; energyText.textContent = `${Math.ceil(p.energy)}`;
-    biomeReadout.textContent = `${BIOMES[biome].label} · ${formatMeters(this.run.distance)} from center`;
+    biomeReadout.textContent = `${BIOMES[biome].label} · ${formatMeters(this.run.distance)} · ${this._todWord} ${WEATHER[this.weatherIdx].id}`;
     statsEl.innerHTML = `kills ${this.run.kills}<br>awe ${Math.floor(this.run.awe)}<br>combo x${Math.max(1, this.run.combo).toFixed(1)}<br>upgrades ${this.run.upgrades}`;
     // Reuse the neighborhood scan update() already did this frame (this.nearActive) instead
     // of rebuilding the 25-chunk active set a second time per frame just for the HUD compass.
@@ -2821,6 +2893,7 @@ deathTitleBtn.addEventListener('click', () => game.title());
 resetBtn.addEventListener('click', () => { localStorage.removeItem(SAVE_KEY); save = loadSave(); game.updateSaveChip(); game.toast('Save reset. The atlas politely pretends it never saw you naked.'); });
 $('journalCloseBtn')?.addEventListener('click', () => game.closeJournal());
 $('pauseJournalBtn')?.addEventListener('click', () => game.toggleJournal());
+document.querySelectorAll('#journalTabs button').forEach(btn => btn.addEventListener('click', () => { game._journalTab = btn.dataset.tab; game.renderJournal(); }));
 
 // Keep load screen visible until init either succeeds or the browser admits defeat.
 game.init().catch((err) => {
