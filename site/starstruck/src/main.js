@@ -38,6 +38,7 @@ const energyText = $('energyText');
 const biomeReadout = $('biomeReadout');
 const statsEl = $('stats');
 const compassEl = $('compass');
+const minimapEl = $('minimap');
 const promptEl = $('prompt');
 const toastEl = $('toast');
 const realizationLog = $('realizationLog');
@@ -117,28 +118,55 @@ function keyName(x, z, type, i = 0) { const [cx, cz] = worldChunk(x, z); return 
 const BIOMES = {
   meadow: {
     label: 'hearth meadow', fog: 0x191538, sky: 0x141235, ground: [0x2e3a72, 0x6a52b8, 0xffd07a],
-    accent: 0xffd36e, water: 0x6df6ff, enemy: ['mote', 'mote', 'wisp', 'sentinel']
+    accent: 0xffd36e, water: 0x6df6ff, enemy: ['mote', 'mote', 'wisp', 'sentinel', 'spore']
   },
   city: {
     label: 'luminous city', fog: 0x0e0c30, sky: 0x0c0a28, ground: [0x21213b, 0x2f4a82, 0x8a5cff],
-    accent: 0x62f7ff, water: 0x37d3ff, enemy: ['sentinel', 'sentinel', 'mote', 'duelist']
+    accent: 0x62f7ff, water: 0x37d3ff, enemy: ['sentinel', 'sentinel', 'mote', 'duelist', 'orbiter']
   },
   desert: {
     label: 'desert of soft knives', fog: 0x2a1a1e, sky: 0x1c1024, ground: [0x8b5440, 0xe0a85d, 0xffe09a],
-    accent: 0xffd36e, water: 0x3fe8d4, enemy: ['mote', 'brute', 'duelist']
+    accent: 0xffd36e, water: 0x3fe8d4, enemy: ['mote', 'brute', 'duelist', 'lancer']
   },
   snow: {
     label: 'nostalgic snow range', fog: 0x1a2848, sky: 0x0c1436, ground: [0x6f9bd0, 0xd7e8ff, 0xffffff],
-    accent: 0xbbe9ff, water: 0x8edcff, enemy: ['sentinel', 'brute', 'mote']
+    accent: 0xbbe9ff, water: 0x8edcff, enemy: ['sentinel', 'brute', 'mote', 'lancer', 'orbiter']
   },
   forest: {
     label: 'wild velvet forest', fog: 0x0c2138, sky: 0x0a1638, ground: [0x14305a, 0x1f8c7a, 0x6effc0],
-    accent: 0x75ffb1, water: 0x5ef8ff, enemy: ['mote', 'duelist', 'wisp', 'wisp']
+    accent: 0x75ffb1, water: 0x5ef8ff, enemy: ['mote', 'duelist', 'wisp', 'wisp', 'spore']
   },
   coast: {
     label: 'ocean-glass coast', fog: 0x0d2548, sky: 0x0b1838, ground: [0x123a78, 0x3a86c8, 0xffd7a0],
-    accent: 0x62f7ff, water: 0x62f7ff, enemy: ['sentinel', 'mote', 'wisp', 'duelist']
+    accent: 0x62f7ff, water: 0x62f7ff, enemy: ['sentinel', 'mote', 'wisp', 'duelist', 'orbiter']
   }
+};
+
+// Per-archetype stats in one place (was inline ternaries scattered through spawn/update).
+// fly = resting hover height; flier adds a sine bob. color 'accent' = biome accent tint.
+// contact = touch damage. boss = scales harder + counts as a guardian.
+const ENEMY = {
+  mote:     { hp: 42,  radius: 0.75, fly: 1.25, color: 0xffffff, contact: 9,  spawnY: 1.0 },
+  sentinel: { hp: 62,  radius: 0.85, fly: 4.2,  color: 'accent', contact: 0,  spawnY: 4.5, flier: true },
+  brute:    { hp: 80,  radius: 1.2,  fly: 0.9,  color: 0xff725d, contact: 10, spawnY: 1.0 },
+  duelist:  { hp: 80,  radius: 0.75, fly: 0.9,  color: 0xff4fd8, contact: 12, spawnY: 1.4 },
+  wisp:     { hp: 26,  radius: 0.55, fly: 1.8,  color: 0x9affd8, contact: 6,  spawnY: 1.8 },
+  lancer:   { hp: 58,  radius: 0.82, fly: 1.05, color: 0xffa23d, contact: 15, spawnY: 1.05 },
+  orbiter:  { hp: 50,  radius: 0.72, fly: 5.0,  color: 0x9f74ff, contact: 0,  spawnY: 5.0, flier: true },
+  spore:    { hp: 34,  radius: 0.8,  fly: 1.4,  color: 0x75ffb1, contact: 7,  spawnY: 1.5 },
+  warden:   { hp: 240, radius: 1.7,  fly: 1.15, color: 0xff3b5e, contact: 16, spawnY: 1.3, boss: true }
+};
+
+// Unique discoverable "points of interest" — named places you stumble on, Bethesda-style.
+// Builders are ChunkManager.poi_<kind>; this table holds the discovery copy + behaviour flags.
+const POI_DEFS = {
+  starliner: { name: 'the Crashed Starliner', guarded: true,  discoverR: 22, note: 'Something fell out of the sky and kept most of its secrets. You can shelter in the hull.' },
+  obelisk:   { name: 'the Obelisk Ring',     guarded: false, discoverR: 18, note: 'Six stones agreeing on a center. The altar between them still keeps its appointment with the light.' },
+  ziggurat:  { name: 'the Skyreach Ziggurat', guarded: true,  discoverR: 22, note: 'A staircase pretending to be a mountain. Climb it; the view is the whole point.' },
+  lantern:   { name: "the Hermit's Lantern", guarded: false, discoverR: 18, note: 'A lighthouse for a sea that left. Its keeper is gone, but the hearth is still warm.' },
+  arcade:    { name: 'the Sunken Arcade',    guarded: true,  discoverR: 22, note: 'A neighborhood that drowned in dusk and kept its neon on out of spite. Rich pickings.' },
+  hollow:    { name: 'the Crystal Hollow',   guarded: false, discoverR: 18, note: 'A bowl of light the ground forgot to close. Break gently; take everything.' },
+  summit:    { name: 'the Summit Shrine',    guarded: false, discoverR: 16, note: 'You climbed for this. The shrine does not congratulate you, which is exactly the gift.' }
 };
 
 
@@ -170,18 +198,25 @@ const REALIZATIONS = [
 ];
 
 const UPGRADE_POOL = [
-  { id: 'velocity', name: 'Velocity Appetite', tag: 'movement', effect: '+14% base speed and sharper air steering.', apply: (p) => { p.upgrades.velocity++; p.walk *= 1.14; p.sprint *= 1.12; p.airControl += 0.5; } },
-  { id: 'dash', name: 'Neon Lunge', tag: 'dash', effect: 'Dash farther, recharge faster, and hurt enemies you pass.', apply: (p) => { p.upgrades.dash++; p.dashPower += 4.2; p.dashCooldown = Math.max(0.46, p.dashCooldown - 0.08); p.dashDamage += 10; } },
-  { id: 'glide', name: 'Snowlight Step', tag: 'air', effect: 'Hold jump to glide longer. First stack grants double jump.', apply: (p) => { p.upgrades.glide++; p.glide = true; p.doubleJump = true; p.gravity *= 0.94; } },
-  { id: 'hearth', name: 'Hearth Compass', tag: 'sanctuary', effect: 'Homes heal more. Wonders call out from farther away.', apply: (p) => { p.upgrades.hearth++; p.homeHeal += 8; p.senseRange += 55; } },
-  { id: 'mirror', name: 'Mirror Rounds', tag: 'combat', effect: 'Shots gain damage and occasionally split on kill.', apply: (p) => { p.upgrades.mirror++; p.shotDamage += 7; p.splitChance = Math.min(0.75, p.splitChance + 0.18); } },
-  { id: 'oasis', name: 'Oasis Skin', tag: 'survival', effect: '+25 max health. Water and homes repair you faster.', apply: (p) => { p.upgrades.oasis++; p.maxHp += 25; p.hp = Math.min(p.maxHp, p.hp + 25); p.homeHeal += 3; } },
-  { id: 'magnet', name: 'City Appetite', tag: 'loot', effect: 'Awe sparks and fragments fly to you from much farther away.', apply: (p) => { p.upgrades.magnet++; p.pickupRange += 10; p.pickupMagnet += 18; } },
-  { id: 'slash', name: 'Mercy Razor', tag: 'close', effect: 'Right-click slash hits harder and refunds energy on contact.', apply: (p) => { p.upgrades.slash++; p.slashDamage += 16; p.slashRange += 0.45; } },
-  { id: 'surge', name: 'Weather Memory', tag: 'area', effect: 'F surge expands, clears bullets, and briefly slows enemies.', apply: (p) => { p.upgrades.surge++; p.surgeRadius += 2.5; p.surgeDamage += 14; } },
-  { id: 'shield', name: 'Quiet Window', tag: 'defense', effect: 'Damage grants a longer mercy window and restores energy.', apply: (p) => { p.upgrades.shield++; p.iframesBonus += 0.2; p.energyRevenge += 12; } },
-  { id: 'rail', name: 'Lightline Spine', tag: 'flow', effect: 'Rails pull harder and dash kills can reset your dash.', apply: (p) => { p.upgrades.rail++; p.railPull += 7; p.killDashRefund = Math.min(0.9, p.killDashRefund + 0.22); } },
-  { id: 'vista', name: 'Farther Eyes', tag: 'explore', effect: 'Fog lifts, landmarks glow harder, and the atlas breathes wider.', apply: (p) => { p.upgrades.vista++; p.viewBonus += 55; p.senseRange += 25; } }
+  { id: 'velocity', name: 'Velocity Appetite', tag: 'movement', effect: '+18% base speed and much sharper air steering.', apply: (p) => { p.upgrades.velocity++; p.walk *= 1.18; p.sprint *= 1.15; p.airControl += 0.8; } },
+  { id: 'dash', name: 'Neon Lunge', tag: 'dash', effect: 'Dash farther, recharge faster, and carve a wound-line through anything you pass.', apply: (p) => { p.upgrades.dash++; p.dashPower += 5.0; p.dashCooldown = Math.max(0.42, p.dashCooldown - 0.1); p.dashDamage += 16; } },
+  { id: 'glide', name: 'Snowlight Step', tag: 'air', effect: 'Glide far longer and float like a rumor. First stack grants a double jump.', apply: (p) => { p.upgrades.glide++; p.glide = true; p.doubleJump = true; p.gravity *= 0.9; } },
+  { id: 'hearth', name: 'Hearth Compass', tag: 'sanctuary', effect: 'Homes heal far more, and every wonder calls out from much farther away.', apply: (p) => { p.upgrades.hearth++; p.homeHeal += 12; p.senseRange += 70; } },
+  { id: 'mirror', name: 'Mirror Rounds', tag: 'combat', effect: '+10 shot damage and a big jump in the odds your kills spray new shots.', apply: (p) => { p.upgrades.mirror++; p.shotDamage += 10; p.splitChance = Math.min(0.85, p.splitChance + 0.22); } },
+  { id: 'oasis', name: 'Oasis Skin', tag: 'survival', effect: '+30 max health, healed instantly, and water/homes repair you faster.', apply: (p) => { p.upgrades.oasis++; p.maxHp += 30; p.hp = Math.min(p.maxHp, p.hp + 30); p.homeHeal += 4; } },
+  { id: 'magnet', name: 'City Appetite', tag: 'loot', effect: 'Awe and fragments rip toward you from across the street.', apply: (p) => { p.upgrades.magnet++; p.pickupRange += 14; p.pickupMagnet += 24; } },
+  { id: 'slash', name: 'Mercy Razor', tag: 'close', effect: 'The slash hits much harder, reaches farther, and refunds more energy.', apply: (p) => { p.upgrades.slash++; p.slashDamage += 22; p.slashRange += 0.6; } },
+  { id: 'surge', name: 'Weather Memory', tag: 'area', effect: 'F-surge erupts wider, hits harder, eats bullets, and freezes the room longer.', apply: (p) => { p.upgrades.surge++; p.surgeRadius += 3.2; p.surgeDamage += 22; } },
+  { id: 'shield', name: 'Quiet Window', tag: 'defense', effect: 'Getting hit buys a long mercy window and dumps energy back into you.', apply: (p) => { p.upgrades.shield++; p.iframesBonus += 0.28; p.energyRevenge += 16; } },
+  { id: 'rail', name: 'Lightline Spine', tag: 'flow', effect: 'Rails grab you harder and dash-kills almost always refund the dash.', apply: (p) => { p.upgrades.rail++; p.railPull += 9; p.killDashRefund = Math.min(0.95, p.killDashRefund + 0.28); } },
+  { id: 'vista', name: 'Farther Eyes', tag: 'explore', effect: 'Fog retreats, landmarks burn brighter, and the atlas breathes wide open.', apply: (p) => { p.upgrades.vista++; p.viewBonus += 70; p.senseRange += 35; } },
+  // ---- newer, flashier laws ----
+  { id: 'chain', name: 'Arc Catechism', tag: 'lightning', effect: 'Hits fork into chain-lightning that leaps to nearby enemies.', apply: (p) => { p.upgrades.chain++; p.chain += 2; p.shotDamage += 3; } },
+  { id: 'homing', name: 'Pilgrim Rounds', tag: 'tracking', effect: 'Your shots bend through the air to chase whatever you nearly aimed at.', apply: (p) => { p.upgrades.homing++; p.homing += 0.6; } },
+  { id: 'slam', name: 'Gravity Sermon', tag: 'impact', effect: 'Landing from a height detonates a shockwave that flattens the ground around you.', apply: (p) => { p.upgrades.slam++; p.slam += 1; } },
+  { id: 'timeDodge', name: 'Slow Light', tag: 'time', effect: 'Dashing drags the whole world into slow motion for a heartbeat. Recharge a touch faster.', apply: (p) => { p.upgrades.timeDodge++; p.timeDodge += 1; p.dashCooldown = Math.max(0.4, p.dashCooldown - 0.06); } },
+  { id: 'lifesteal', name: 'Wound Tax', tag: 'vampire', effect: 'Every kill bleeds a little of its light back into your health.', apply: (p) => { p.upgrades.lifesteal++; p.lifesteal += 6; } },
+  { id: 'revive', name: 'Second Verse', tag: 'mercy', effect: 'Once per run, a killing blow leaves you standing at a sliver instead of folded.', apply: (p) => { p.upgrades.revive++; p.revive += 1; } }
 ];
 
 function hasWebGL() {
@@ -385,6 +420,8 @@ class Player {
     this.glide = false; this.doubleJump = false; this.iframes = 0; this.iframesBonus = 0; this.energyRevenge = 8;
     this.homeHeal = 10; this.senseRange = 120; this.viewBonus = 0; this.pickupRange = 4.5; this.pickupMagnet = 12;
     this.railPull = 10; this.killDashRefund = 0.0; this.splitChance = 0.05;
+    // newer, flashier upgrade hooks
+    this.chain = 0; this.homing = 0; this.slam = 0; this.timeDodge = 0; this.lifesteal = 0; this.revive = 0; this.usedRevive = false;
     this.upgrades = Object.fromEntries(UPGRADE_POOL.map(u => [u.id, 0]));
     this.solids = [];
     this.forward = new THREE.Vector3();
@@ -463,15 +500,24 @@ class Player {
 
     const oldX = this.pos.x;
     this.pos.x += this.vel.x * dt;
-    if (this.collides()) { this.pos.x = oldX; this.vel.x *= -0.08; }
+    if (this.collides() && !this.tryStep()) { this.pos.x = oldX; this.vel.x *= -0.08; }
     const oldZ = this.pos.z;
     this.pos.z += this.vel.z * dt;
-    if (this.collides()) { this.pos.z = oldZ; this.vel.z *= -0.08; }
+    if (this.collides() && !this.tryStep()) { this.pos.z = oldZ; this.vel.z *= -0.08; }
     this.pos.y += this.vel.y * dt;
 
-    const ground = heightAt(this.pos.x, this.pos.z);
-    if (this.pos.y <= ground) {
-      this.pos.y = ground;
+    // Floor support = the highest of terrain and any solid top right under our feet, so you can
+    // stand on rooftops, ziggurat tiers, the wreck deck, etc. — not just terrain.
+    let support = heightAt(this.pos.x, this.pos.z);
+    const r = this.radius;
+    for (const box of this.solids) {
+      if (this.pos.x + r > box.min.x && this.pos.x - r < box.max.x && this.pos.z + r > box.min.z && this.pos.z - r < box.max.z) {
+        const top = box.max.y;
+        if (top > support && top <= this.pos.y + 0.4) support = top; // only treat as floor when we're at/just above it
+      }
+    }
+    if (this.pos.y <= support) {
+      this.pos.y = support;
       this.vel.y = Math.max(0, this.vel.y);
       if (!this.onGround) particles.spawn(this.fx.set(this.pos.x, this.pos.y + 0.15, this.pos.z), 0xffffff, Math.min(18, 3 + Math.hypot(this.vel.x, this.vel.z)), 0.45);
       this.onGround = true;
@@ -499,6 +545,17 @@ class Player {
     for (const box of this.solids) {
       if (minx < box.max.x && maxx > box.min.x && minz < box.max.z && maxz > box.min.z && miny < box.max.y && maxy > box.min.y) return true;
     }
+    return false;
+  }
+  // Climb a low ledge (stairs, ziggurat tier, curb) instead of bonking: while grounded, try
+  // raising up to stepHeight and keeping the move if that clears the obstacle. The vertical
+  // resolve then settles us onto the ledge. Returns true if a step was taken.
+  tryStep() {
+    if (!this.onGround && this.vel.y < -1) return false; // no wall-climbing in mid-fall
+    const STEP = 0.62, savedY = this.pos.y;
+    this.pos.y += STEP;
+    if (!this.collides()) return true;
+    this.pos.y = savedY;
     return false;
   }
   hurt(amount, source, game) {
@@ -837,6 +894,11 @@ class ChunkManager {
     if (!(cx === 0 && cz === 0) && (biome === 'meadow' || biome === 'snow' || (rng() > 0.72 && biome !== 'city'))) {
       this.addHome({ ...ctx, id: 1 });
     }
+    // Rare unique places-with-names ("points of interest") you stumble onto and discover.
+    // Separate hash from landmarks so the two don't pile onto the same chunks.
+    if (!(cx === 0 && cz === 0) && hash2(cx * 7 + 3, cz * 7 - 5) > 0.88) {
+      this.addPOI({ ...ctx, id: 2 });
+    }
   }
   addTerrain(group, cx, cz, biome) {
     const div = this.detail;
@@ -1140,6 +1202,108 @@ class ChunkManager {
     const key = keyName(wx, wz, 'home', id);
     ctx.interactables.push({ type: 'home', key, pos: new THREE.Vector3(wx, y0 + 0.5, wz), radius: 8.6, label: save.seen[key] ? 'rest in the lit house' : 'open the lit house', used: !!save.seen[key] });
   }
+  // A short flight of climbable steps from (lx,lz) along (dirX,dirZ). Each step is a solid block
+  // from the ground up to its top so there are no gaps; rises of ~0.5 fit the player's step-up.
+  addStairs(ctx, lx, lz, dirX, dirZ, steps, rise, run, width, mat) {
+    const base = this.heightAt(ctx.ox + lx, ctx.oz + lz);
+    for (let i = 0; i < steps; i++) {
+      const sx = lx + dirX * run * i, sz = lz + dirZ * run * i, h = (i + 1) * rise;
+      const sizeX = dirX !== 0 ? run + 0.02 : width, sizeZ = dirZ !== 0 ? run + 0.02 : width;
+      ctx.addMesh(this.geos.box, mat, sx, base + h / 2, sz, sizeX, h, sizeZ);
+      ctx.addSolid(ctx.ox + sx, base, ctx.oz + sz, sizeX, h, sizeZ);
+    }
+  }
+  // ---- Points of interest: each builds a distinct silhouette and registers a 'poi' discovery
+  // interactable (auto-discovered on approach). Some also drop a 'home' rest spot or 'vista' shrine.
+  addPOI(ctx) {
+    const lx = randRangeR(ctx.rng, -24, 24), lz = randRangeR(ctx.rng, -24, 24);
+    const wx = ctx.ox + lx, wz = ctx.oz + lz, y0 = this.heightAt(wx, wz);
+    const kinds = y0 > 7 ? ['summit', 'summit', 'lantern'] : ['starliner', 'obelisk', 'ziggurat', 'lantern', 'arcade', 'hollow'];
+    const kind = kinds[Math.floor(ctx.rng() * kinds.length)];
+    this['poi_' + kind](ctx, lx, lz, y0);
+    const def = POI_DEFS[kind], key = keyName(wx, wz, 'poi', ctx.id);
+    ctx.interactables.push({ type: 'poi', kind, key, name: def.name, note: def.note, guarded: !!def.guarded, discoverR: def.discoverR, pos: new THREE.Vector3(wx, y0 + 1, wz), radius: def.discoverR, used: !!save.seen[key] });
+  }
+  poi_starliner(ctx, lx, lz, y0) {
+    // a great fallen hull half-buried at an angle, one wing snapped, an engine still glowing
+    ctx.addMesh(this.geos.cyl, this.mats.wall, lx, y0 + 2.6, lz, 2.7, 17, 2.7, 0.32, Math.PI / 2 - 0.32);
+    ctx.addMesh(this.geos.cone, this.mats.dark, lx + 7.6, y0 + 1.0, lz + 1.4, 2.5, 5, 2.5, 0.32, Math.PI / 2 + 1.1);
+    ctx.addMesh(this.geos.box, this.mats.wall, lx - 3, y0 + 1.7, lz + 4.2, 9, 0.4, 3, 0.42);
+    ctx.addMesh(this.geos.torus, this.mats.cyan, lx - 7.6, y0 + 2.4, lz - 1.2, 2.0, 2.0, 2.0, 0, Math.PI / 2);
+    ctx.addLight?.(0x62f7ff, 2.2, 24, 2, lx - 7.6, y0 + 2.4, lz - 1.2);
+    // a flat boardable deck welded to the top of the hull — climb on with the step-up
+    this.addBoxDecor(ctx, this.mats.concrete, lx, lz, 5.4, 0.4, 3.2, 3.0, 0, true);
+    this.addStairs(ctx, lx, lz + 4.2, 0, -1, 6, 0.55, 1.0, 2.4, this.mats.concrete);
+    ctx.addSolid(ctx.ox + lx, y0, ctx.oz + lz, 5.2, 3.2, 5.2);
+    for (let i = 0; i < 4; i++) this.addPod(ctx, lx + randRangeR(ctx.rng, -9, 9), lz + randRangeR(ctx.rng, -9, 9), ctx.rng() > 0.5 ? 0x62f7ff : 0xff4fd8);
+    const wx = ctx.ox + lx, wz = ctx.oz + lz, k = keyName(wx, wz, 'wreck', 9);
+    ctx.interactables.push({ type: 'home', key: k, pos: new THREE.Vector3(wx, y0 + 0.5, wz - 3), radius: 6, label: save.seen[k] ? 'rest in the wreck' : 'shelter in the wreck', used: !!save.seen[k] });
+  }
+  poi_obelisk(ctx, lx, lz, y0) {
+    const n = 6;
+    for (let i = 0; i < n; i++) {
+      const a = i / n * TAU, ox = Math.cos(a) * 7.5, oz = Math.sin(a) * 7.5;
+      const hy = this.heightAt(ctx.ox + lx + ox, ctx.oz + lz + oz), h = randRangeR(ctx.rng, 5.5, 8);
+      this.addBoxDecor(ctx, this.mats.rock, lx + ox, lz + oz, 1.5, h, 1.5, 0, a, true);
+      ctx.addMesh(this.geos.box, this.mats.violet, lx + ox, hy + h + 0.2, lz + oz, 1.7, 0.35, 1.7, a);
+    }
+    ctx.addMesh(this.geos.cyl, this.mats.dark, lx, y0 + 0.4, lz, 2.4, 0.8, 2.4);
+    ctx.addMesh(this.geos.cone, this.mats.gold, lx, y0 + 1.9, lz, 0.85, 2.4, 0.85);
+    ctx.addLight?.(0xffd36e, 2.4, 24, 2, lx, y0 + 2, lz);
+    const wx = ctx.ox + lx, wz = ctx.oz + lz, k = keyName(wx, wz, 'shrine', 8);
+    ctx.interactables.push({ type: 'vista', key: k, pos: new THREE.Vector3(wx, y0 + 1, wz), radius: 5, label: save.seen[k] ? 'commune at the obelisks' : 'read the obelisk ring', used: !!save.seen[k] });
+  }
+  poi_ziggurat(ctx, lx, lz, y0) {
+    // stacked tiers each only 0.6 tall, so you walk straight up the pyramid with the step-up
+    const levels = 6;
+    for (let i = 0; i < levels; i++) {
+      const s = 17 - i * 2.4;
+      this.addBoxDecor(ctx, i % 2 ? this.mats.wall : this.mats.concrete, lx, lz, s, 0.6, s, i * 0.6, 0, true);
+    }
+    const topY = y0 + levels * 0.6;
+    ctx.addMesh(this.geos.cone, this.mats.pink, lx, topY + 1.5, lz, 1.3, 2.8, 1.3);
+    ctx.addLight?.(0xff4fd8, 2.6, 30, 2, lx, topY + 1.6, lz);
+    const wx = ctx.ox + lx, wz = ctx.oz + lz, k = keyName(wx, wz, 'shrine', 7);
+    ctx.interactables.push({ type: 'vista', key: k, pos: new THREE.Vector3(wx, topY + 0.6, wz), radius: 5.5, label: save.seen[k] ? 'overlook from the ziggurat' : 'claim the ziggurat peak', used: !!save.seen[k] });
+  }
+  poi_lantern(ctx, lx, lz, y0) {
+    for (let i = 0; i < 4; i++) ctx.addMesh(this.geos.cyl, i % 2 ? this.mats.warmWall : this.mats.wall, lx, y0 + 1.5 + i * 3, lz, 2.4 - i * 0.22, 3.02, 2.4 - i * 0.22);
+    const topY = y0 + 1.5 + 3 * 3 + 1.5;
+    ctx.addMesh(this.geos.cyl, this.mats.window, lx, topY + 1.4, lz, 1.7, 2.2, 1.7);
+    ctx.addMesh(this.geos.cone, this.mats.roof, lx, topY + 3.3, lz, 2.2, 1.8, 2.2);
+    ctx.addLight?.(0xffd36e, 3.4, 64, 1.4, lx, topY + 1.4, lz);
+    ctx.addSolid(ctx.ox + lx, y0, ctx.oz + lz, 4.4, 13, 4.4);
+    this.addStairs(ctx, lx, lz + 5.4, 0, -1, 8, 0.55, 1.0, 2.2, this.mats.concrete);
+    const wx = ctx.ox + lx, wz = ctx.oz + lz, k = keyName(wx, wz, 'hearth', 6);
+    ctx.interactables.push({ type: 'home', key: k, pos: new THREE.Vector3(wx, y0 + 0.5, wz + 3.2), radius: 6, label: save.seen[k] ? 'rest at the lantern' : 'enter the lantern', used: !!save.seen[k] });
+  }
+  poi_arcade(ctx, lx, lz, y0) {
+    for (let i = 0; i < 6; i++) {
+      const ox = randRangeR(ctx.rng, -12, 12), oz = randRangeR(ctx.rng, -12, 12);
+      const h = randRangeR(ctx.rng, 2.6, 6.5), w = randRangeR(ctx.rng, 3, 5), yb = this.heightAt(ctx.ox + lx + ox, ctx.oz + lz + oz);
+      this.addBoxDecor(ctx, ctx.rng() > 0.5 ? this.mats.dark : this.mats.wall, lx + ox, lz + oz, w, h, w, 0, randRangeR(ctx.rng, -0.3, 0.3), true);
+      ctx.addMesh(this.geos.box, ctx.rng() > 0.5 ? this.mats.cyan : this.mats.pink, lx + ox, yb + h * 0.6, lz + oz + w / 2 + 0.05, w * 0.66, 0.5, 0.06);
+    }
+    for (let i = 0; i < 5; i++) this.addPod(ctx, lx + randRangeR(ctx.rng, -12, 12), lz + randRangeR(ctx.rng, -12, 12), ctx.rng() > 0.5 ? 0x62f7ff : 0xff4fd8);
+    for (let i = 0; i < 3; i++) this.addCrystal(ctx, lx + randRangeR(ctx.rng, -12, 12), lz + randRangeR(ctx.rng, -12, 12), 0xff4fd8, 0.9);
+  }
+  poi_hollow(ctx, lx, lz, y0) {
+    this.addLumenPool(ctx, lx, lz);
+    for (let i = 0; i < 10; i++) {
+      const a = i / 10 * TAU, r = randRangeR(ctx.rng, 3, 10);
+      this.addCrystal(ctx, lx + Math.cos(a) * r, lz + Math.sin(a) * r, [0x62f7ff, 0xffd36e, 0xff4fd8, 0x75ffb1][Math.floor(ctx.rng() * 4)], randRangeR(ctx.rng, 1.0, 2.2));
+    }
+    ctx.addMesh(this.geos.cone, this.mats.cyan, lx, y0 + 3.6, lz, 1.7, 7.2, 1.7);
+    ctx.addLight?.(0x62f7ff, 2.2, 28, 2, lx, y0 + 3, lz);
+  }
+  poi_summit(ctx, lx, lz, y0) {
+    ctx.addMesh(this.geos.cyl, this.mats.dark, lx, y0 + 0.5, lz, 3, 1, 3);
+    for (let i = 0; i < 3; i++) { const a = i / 3 * TAU; this.addBoxDecor(ctx, this.mats.rock, lx + Math.cos(a) * 2.4, lz + Math.sin(a) * 2.4, 0.9, randRangeR(ctx.rng, 3, 4.5), 0.9, 0, a, true); }
+    ctx.addMesh(this.geos.sphere, this.mats.moon, lx, y0 + 4.6, lz, 1.5, 1.5, 1.5);
+    ctx.addLight?.(0xbcd2ff, 2.6, 42, 1.6, lx, y0 + 4.6, lz);
+    const wx = ctx.ox + lx, wz = ctx.oz + lz, k = keyName(wx, wz, 'shrine', 5);
+    ctx.interactables.push({ type: 'vista', key: k, pos: new THREE.Vector3(wx, y0 + 1, wz), radius: 5.5, label: save.seen[k] ? 'breathe at the summit' : 'reach the summit shrine', used: !!save.seen[k] });
+  }
   addStartGarden(ctx) {
     this.addPod(ctx, 0, 26, 0x75ffb1);
     this.addCrystal(ctx, -5, 35, 0xffd36e, 0.85);
@@ -1205,6 +1369,7 @@ class Game {
     this.projectiles = []; this.enemyProjectiles = []; this.enemies = []; this.pickups = [];
     this.solids = [];
     this.clock = 0; this.last = performance.now(); this.spawnTimer = 0; this.shake = 0; this.toastTimer = 0; this.realizationTimer = 0;
+    this.bulletTime = 0; this._prevDash = 0; this._wasAir = false; // Slow Light + Gravity Sermon hooks
     this.run = { start: performance.now(), awe: 0, xp: 0, nextXp: 70, kills: 0, upgrades: 0, distance: 0, combo: 0, comboTimer: 0 };
     this.nearest = null;
     this.lastShotSplit = 0;
@@ -1292,7 +1457,8 @@ class Game {
     this.pickupMats = new Map();
     this.enemyGeos = {
       brute: new THREE.IcosahedronGeometry(1.2, 1), body: new THREE.SphereGeometry(0.72, 14, 8), ring: new THREE.TorusGeometry(1.1, 0.06, 8, 30),
-      blade: new THREE.BoxGeometry(0.18, 1.8, 0.18), eye: new THREE.SphereGeometry(0.18, 8, 5)
+      blade: new THREE.BoxGeometry(0.18, 1.8, 0.18), eye: new THREE.SphereGeometry(0.18, 8, 5),
+      spike: new THREE.ConeGeometry(0.34, 1.5, 7), shell: new THREE.IcosahedronGeometry(0.86, 0), crown: new THREE.TorusGeometry(1.0, 0.1, 8, 22)
     };
     dirDmg.innerHTML = '<div class="arc"></div>';
     this.dirArc = dirDmg.querySelector('.arc');
@@ -1380,6 +1546,7 @@ class Game {
     this.hitStop = 0; this.dirDmgTimer = 0; this.spawnTimer = 1.8; if (this.dirArc) this.dirArc.classList.remove('show');
     touchInteractBtn.classList.add('hidden');
     this.run = { start: performance.now(), awe: 0, xp: 0, nextXp: 70, kills: 0, upgrades: 0, distance: 0, combo: 0, comboTimer: 0 };
+    this.guardSpawned = new Set(); // POIs whose wardens have already been roused this run
     this.world.buildQueue.length = 0; this.world.buildSet.clear();
     this.world.update(this.player.pos, 1, 4.5);
     this.player.setSolids(this.world.collectSolids(this.player.pos.x, this.player.pos.z, this.solids));
@@ -1416,6 +1583,7 @@ class Game {
     let dt = Math.min(0.033, Math.max(0.001, (t - this.last) / 1000)); this.last = t;
     const realDt = dt;
     if (this.hitStop > 0) { this.hitStop = Math.max(0, this.hitStop - realDt); dt *= 0.16; }
+    if (this.bulletTime > 0) { this.bulletTime = Math.max(0, this.bulletTime - realDt); dt *= 0.4; } // Slow Light dash
     if (this.mode === 'play') this.update(dt);
     this.render(realDt);
   }
@@ -1426,7 +1594,12 @@ class Game {
     p.setSolids(this.world.collectSolids(p.pos.x, p.pos.z, this.solids));
     this.nearActive = this.world.activeNear(p.pos.x, p.pos.z);
     this.destructibles = this.nearActive.destructibles;
+    const preVy = p.vel.y, wasAir = !p.onGround;
     p.update(dt, this.input, (x, z) => this.world.heightAt(x, z), this.audio, this.particles);
+    // Gravity Sermon: a hard landing erupts a shockwave. Slow Light: dashing dilates time.
+    if (p.slam && wasAir && p.onGround && preVy < -10) this.groundSlam(preVy);
+    if (p.timeDodge && p.dashTime > 0 && this._prevDash <= 0) this.bulletTime = Math.max(this.bulletTime, 0.42);
+    this._prevDash = p.dashTime;
     this.applyRailAssist(dt);
     this.handlePlayerAttacks(dt);
     this.updateEnemies(dt);
@@ -1443,7 +1616,37 @@ class Game {
     this.run.distance = Math.max(this.run.distance, Math.hypot(p.pos.x, p.pos.z));
     this.run.comboTimer = Math.max(0, this.run.comboTimer - dt);
     if (this.run.comboTimer <= 0) this.run.combo = Math.max(0, this.run.combo - dt * 1.5);
-    if (p.hp <= 0) this.die();
+    if (p.hp <= 0) { if (p.revive > 0 && !p.usedRevive) this.triggerRevive(); else this.die(); }
+  }
+  triggerRevive() {
+    const p = this.player; p.usedRevive = true; p.revive--;
+    p.hp = Math.max(1, Math.round(p.maxHp * 0.4)); p.energy = p.maxEnergy; p.iframes = 2.0;
+    for (const b of this.enemyProjectiles) b.life = Math.min(b.life, 0.04);
+    this.particles.spawn((this._reviveFx ||= new THREE.Vector3()).set(p.pos.x, p.pos.y + 1, p.pos.z), 0xffd36e, 80, 2.0);
+    this.particles.spawn(this._reviveFx, 0xffffff, 30, 1.2);
+    this.shake = Math.max(this.shake, 0.8); this.hitStop = Math.max(this.hitStop, 0.08); this.audio.upgrade();
+    this.toast('Second Verse. The killing blow lands and you simply refuse the punctuation.', 3.2);
+  }
+  groundSlam(vy) {
+    const p = this.player, power = clamp(-vy / 18, 0.5, 2.2);
+    const radius = (6 + p.slam * 2.6) * power, dmg = (26 + p.slam * 14) * power;
+    for (const e of this.enemies) if (!e.dead && e.pos.distanceTo(p.pos) < radius + e.radius) { this.damageEnemy(e, dmg, p.pos, 0xffd36e, { crit: true }); e.slow = Math.max(e.slow, 1.0); }
+    for (const d of this.destructibles) if (!d.dead && d.pos.distanceTo(p.pos) < radius + d.radius) this.damageDestructible(d, dmg, p.pos, { crit: true });
+    this.particles.spawn((this._slamFx ||= new THREE.Vector3()).set(p.pos.x, p.pos.y + 0.2, p.pos.z), 0xffd36e, 50, 1.8);
+    this.shake = Math.max(this.shake, 0.6); this.hitStop = Math.max(this.hitStop, 0.05); this.audio.tone(70, 0.3, 'sine', 0.09, 2.4);
+  }
+  // Arc Catechism: a hit forks lightning to nearby enemies, each jump drawing a crackle of sparks.
+  arcChain(src, jumps, dmg) {
+    let from = src; const hit = new Set([src]);
+    const fx = this._arcFx ||= new THREE.Vector3();
+    for (let j = 0; j < jumps; j++) {
+      let best = null, bd = 13 * 13;
+      for (const e of this.enemies) { if (e.dead || hit.has(e)) continue; const dx = e.pos.x - from.pos.x, dy = e.pos.y - from.pos.y, dz = e.pos.z - from.pos.z; const dd = dx * dx + dy * dy + dz * dz; if (dd < bd) { bd = dd; best = e; } }
+      if (!best) break;
+      for (let s = 1; s <= 5; s++) { const t = s / 5; fx.set(lerp(from.pos.x, best.pos.x, t) + randRange(-0.3, 0.3), lerp(from.pos.y, best.pos.y, t) + randRange(-0.3, 0.3), lerp(from.pos.z, best.pos.z, t) + randRange(-0.3, 0.3)); this.particles.spawn(fx, 0x9afcff, 2, 0.3); }
+      this.damageEnemy(best, dmg, from.pos, 0x9afcff); hit.add(best); from = best;
+    }
+    this.audio.tone(900, 0.05, 'square', 0.03, 1.2);
   }
   updateEnvironment(dt) {
     const b = this.world.biomeAt(this.player.pos.x, this.player.pos.z);
@@ -1677,25 +1880,37 @@ class Game {
     const dist = randRange(44, 94);
     const x = p.x + Math.cos(angle) * dist, z = p.z + Math.sin(angle) * dist;
     const biome = this.world.biomeAt(x, z);
-    const type = choice(BIOMES[biome].enemy);
-    const y = this.world.heightAt(x, z) + (type === 'sentinel' ? 4.5 : type === 'duelist' ? 1.4 : type === 'wisp' ? 1.8 : 1.0);
+    this.spawnEnemyAt(choice(BIOMES[biome].enemy), x, z, biome);
+  }
+  // Build one enemy of a given type at a world position (used for ambient spawns, POI guardians,
+  // and spore splits). Returns the enemy record.
+  spawnEnemyAt(type, x, z, biome) {
+    const stat = ENEMY[type] || ENEMY.mote;
+    const y = this.world.heightAt(x, z) + stat.spawnY;
     const mesh = this.makeEnemyMesh(type, biome);
     mesh.position.set(x, y, z); mesh.scale.setScalar(0.01); this.scene.add(mesh);
     this.particles.spawn((this._spawnFx ||= new THREE.Vector3()).set(x, y, z), BIOMES[biome].accent, 12, 0.8);
-    const hp = type === 'brute' ? 80 : type === 'sentinel' ? 62 : type === 'duelist' ? 80 : type === 'wisp' ? 26 : 42;
-    const fullHp = hp + this.run.distance * 0.01;
-    this.enemies.push({ type, biome, mesh, pos: mesh.position, vel: new THREE.Vector3(), hp: fullHp, maxHp: fullHp, radius: type === 'brute' ? 1.2 : type === 'sentinel' ? 0.85 : type === 'wisp' ? 0.55 : 0.75, fireCd: randRange(0.3, 1.8), hurt: 0, dead: false, slow: 0, phase: Math.random() * TAU, mat: mesh.userData.mat, baseEmissive: mesh.userData.mat.emissiveIntensity, emColor: mesh.userData.mat.emissive.clone(), flash: 0, bar: null, barTimer: 0, telegraph: 0, born: this.clock });
+    const fullHp = stat.hp + this.run.distance * (stat.boss ? 0.05 : 0.01);
+    const e = { type, biome, mesh, pos: mesh.position, vel: new THREE.Vector3(), hp: fullHp, maxHp: fullHp, radius: stat.radius, fireCd: randRange(0.3, 1.8), hurt: 0, dead: false, slow: 0, phase: Math.random() * TAU, mat: mesh.userData.mat, baseEmissive: mesh.userData.mat.emissiveIntensity, emColor: mesh.userData.mat.emissive.clone(), flash: 0, bar: null, barTimer: 0, telegraph: 0, born: this.clock, windup: 0, chargeT: 0, chargeCd: randRange(1.6, 3.0), chargeDir: new THREE.Vector3(), burst: 0, burstCd: 0, boss: !!stat.boss };
+    this.enemies.push(e);
+    return e;
   }
   makeEnemyMesh(type, biome) {
     const info = BIOMES[biome];
+    const stat = ENEMY[type] || ENEMY.mote;
     const group = new THREE.Group();
-    const color = type === 'brute' ? 0xff725d : type === 'sentinel' ? info.accent : type === 'duelist' ? 0xff4fd8 : type === 'wisp' ? 0x9affd8 : 0xffffff;
+    const color = stat.color === 'accent' ? info.accent : stat.color;
     const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: type === 'mote' ? 0.9 : 1.35, roughness: 0.36, metalness: 0.05 });
     const dark = this.enemyDarkMat; // shared (the per-enemy animated material is `mat`, kept per-instance)
-    const body = new THREE.Mesh(type === 'brute' ? this.enemyGeos.brute : this.enemyGeos.body, mat); group.add(body);
-    if (type === 'sentinel') { const ring = new THREE.Mesh(this.enemyGeos.ring, mat); ring.rotation.x = Math.PI / 2; group.add(ring); group.userData.ring = ring; }
+    const bodyGeo = (type === 'brute' || type === 'warden') ? this.enemyGeos.brute : type === 'spore' ? this.enemyGeos.shell : this.enemyGeos.body;
+    const body = new THREE.Mesh(bodyGeo, mat); group.add(body);
+    if (type === 'warden') body.scale.setScalar(1.5);
+    if (type === 'sentinel' || type === 'orbiter' || type === 'warden') { const ring = new THREE.Mesh(this.enemyGeos.ring, mat); ring.rotation.x = Math.PI / 2; if (type === 'warden') ring.scale.setScalar(1.6); group.add(ring); group.userData.ring = ring; }
     if (type === 'duelist') { const blade = new THREE.Mesh(this.enemyGeos.blade, mat); blade.position.set(0.85, 0, 0); blade.rotation.z = 0.6; group.add(blade); }
-    const eye = new THREE.Mesh(this.enemyGeos.eye, dark); eye.position.set(0, 0.15, -0.62); group.add(eye);
+    if (type === 'lancer') { const spike = new THREE.Mesh(this.enemyGeos.spike, mat); spike.position.set(0, 0, -0.78); spike.rotation.x = -Math.PI / 2; group.add(spike); }
+    if (type === 'spore') for (let i = 0; i < 3; i++) { const nub = new THREE.Mesh(this.enemyGeos.eye, mat); const a = i / 3 * TAU; nub.position.set(Math.cos(a) * 0.72, 0.2, Math.sin(a) * 0.72); nub.scale.setScalar(1.4); group.add(nub); }
+    if (type === 'warden') { const crown = new THREE.Mesh(this.enemyGeos.crown, mat); crown.rotation.x = Math.PI / 2; crown.position.y = 1.2; crown.scale.setScalar(1.5); group.add(crown); }
+    const eye = new THREE.Mesh(this.enemyGeos.eye, dark); eye.position.set(0, type === 'warden' ? 0.34 : 0.15, type === 'warden' ? -1.05 : -0.62); if (type === 'warden') eye.scale.setScalar(1.8); group.add(eye);
     group.traverse(o => { if (o.isMesh) { o.castShadow = this.quality === 'high' && !IS_TOUCH; o.receiveShadow = this.quality !== 'low'; } });
     group.userData.mat = mat; group.userData.body = body;
     return group;
@@ -1709,6 +1924,7 @@ class Game {
       if (e.dead) continue;
       e.hurt = Math.max(0, e.hurt - dt); e.slow = Math.max(0, e.slow - dt);
       e.flash = Math.max(0, e.flash - dt * 6); e.barTimer = Math.max(0, e.barTimer - dt); e.telegraph = Math.max(0, e.telegraph - dt * 2.2);
+      const stat = ENEMY[e.type] || ENEMY.mote;
       const to = (this._enemyTo ||= new THREE.Vector3()).copy(p.pos).sub(e.pos); const d = Math.max(0.001, to.length()); const dir = to.multiplyScalar(1 / d);
       const slowMul = e.slow > 0 ? 0.42 : 1;
       let desired = (this._enemyDesired ||= new THREE.Vector3()).set(0, 0, 0);
@@ -1725,27 +1941,63 @@ class Game {
       } else if (e.type === 'brute') {
         desired.addScaledVector(dir, d > 10 ? 6.0 : 1.5); // slower, especially up close — kiteable now
         if (d < 5.6) e.telegraph = 1;                     // telegraphs from farther so you can read it
-        if (d < 2.1 && p.hurt(10, e.pos, this)) p.hp = 0; // contact 16 -> 10
+        if (d < 2.1 && p.hurt(stat.contact, e.pos, this)) p.hp = 0;
       } else if (e.type === 'duelist') {
         const tangent = (this._enemyTangent ||= new THREE.Vector3()).set(-dir.z, 0, dir.x).multiplyScalar(Math.sin(this.clock * 2.1 + e.phase));
         desired.addScaledVector(dir, d > 5 ? 11 : -3).addScaledVector(tangent, 4);
         if (d < 4) e.telegraph = 1;
-        if (d < 2.3 && p.hurt(12, e.pos, this)) p.hp = 0;
+        if (d < 2.3 && p.hurt(stat.contact, e.pos, this)) p.hp = 0;
       } else if (e.type === 'wisp') {
         const weave = (this._enemyTangent ||= new THREE.Vector3()).set(-dir.z, 0, dir.x).multiplyScalar(Math.sin(this.clock * 3.4 + e.phase));
         desired.addScaledVector(dir, 13.5).addScaledVector(weave, 7.5); // fast + erratic
         if (d < 2.2) e.telegraph = 1;
-        if (d < 1.35 && p.hurt(6, e.pos, this)) p.hp = 0;
+        if (d < 1.35 && p.hurt(stat.contact, e.pos, this)) p.hp = 0;
+      } else if (e.type === 'lancer') {
+        // hangs at mid-range, winds up with a bright tell, then spears straight through you
+        if (e.chargeT > 0) {
+          e.chargeT -= dt;
+          desired.copy(e.chargeDir).multiplyScalar(30);
+          if (d < 2.2 && p.hurt(stat.contact, e.pos, this)) p.hp = 0;
+        } else if (e.windup > 0) {
+          e.windup -= dt; e.telegraph = 1;
+          desired.addScaledVector(dir, -2.0); // brace backward before the lunge
+          if (e.windup <= 0) { e.chargeDir.copy(dir); e.chargeT = 0.5; e.chargeCd = randRange(1.9, 3.0); }
+        } else {
+          e.chargeCd -= dt;
+          desired.addScaledVector(dir, d > 16 ? 10 : d < 9 ? -6 : 2);
+          if (e.chargeCd <= 0 && d < 30 && d > 7) e.windup = 0.5;
+        }
+      } else if (e.type === 'orbiter') {
+        const tangent = (this._enemyTangent ||= new THREE.Vector3()).set(-dir.z, 0, dir.x).multiplyScalar(Math.sin(this.clock * 0.8 + e.phase) > 0 ? 1 : -1);
+        desired.addScaledVector(dir, d > 24 ? 8 : d < 16 ? -7 : 0).addScaledVector(tangent, 9);
+        e.fireCd -= dt;
+        if (e.fireCd < 0.4 && d < 72) e.telegraph = 1;
+        if (e.fireCd <= 0 && d < 72) { e.fireCd = randRange(1.9, 2.9); e.burst = 3; e.burstCd = 0; }
+        if (e.burst > 0) { e.burstCd -= dt; if (e.burstCd <= 0) { e.burst--; e.burstCd = 0.15; const sd = (this._enemyShotDir ||= new THREE.Vector3()).set(p.pos.x, p.pos.y + 1.1, p.pos.z).sub(e.pos); this.fireProjectile(true, e.pos, sd); } }
+      } else if (e.type === 'spore') {
+        const weave = (this._enemyTangent ||= new THREE.Vector3()).set(-dir.z, 0, dir.x).multiplyScalar(Math.sin(this.clock * 1.6 + e.phase));
+        desired.addScaledVector(dir, 5.5).addScaledVector(weave, 3.2); // slow, drifting; splits when it dies
+        if (d < 3) e.telegraph = 1;
+        if (d < 1.7 && p.hurt(stat.contact, e.pos, this)) p.hp = 0;
+      } else if (e.type === 'warden') {
+        desired.addScaledVector(dir, d > 7 ? 4.2 : 1.2); // big, slow, body-bully boss
+        e.fireCd -= dt;
+        if (e.fireCd < 0.7) e.telegraph = 1;
+        if (e.fireCd <= 0 && d < 95) {
+          e.fireCd = randRange(2.4, 3.6);
+          for (let k = 0; k < 10; k++) { const a = k / 10 * TAU; const sd = (this._wardenDir ||= new THREE.Vector3()).set(Math.cos(a), 0.05, Math.sin(a)); this.fireProjectile(true, e.pos, sd); } // radial spray
+        }
+        if (d < 2.8 && p.hurt(stat.contact, e.pos, this)) p.hp = 0;
       } else {
         desired.addScaledVector(dir, 12.5);
         if (d < 3) e.telegraph = 1;
-        if (d < 1.55 && p.hurt(9, e.pos, this)) p.hp = 0;
+        if (d < 1.55 && p.hurt(stat.contact, e.pos, this)) p.hp = 0;
       }
       desired.multiplyScalar(slowMul);
-      e.vel.lerp(desired, Math.min(1, dt * 2.8));
+      e.vel.lerp(desired, Math.min(1, dt * (e.type === 'lancer' && e.chargeT > 0 ? 8 : 2.8)));
       e.pos.addScaledVector(e.vel, dt);
       const ground = this.world.heightAt(e.pos.x, e.pos.z);
-      const fly = e.type === 'sentinel' ? 4.2 + Math.sin(this.clock * 2 + e.phase) * 0.7 : e.type === 'mote' ? 1.25 : 0.9;
+      const fly = stat.flier ? stat.fly + Math.sin(this.clock * 2 + e.phase) * 0.7 : stat.fly;
       e.pos.y = lerp(e.pos.y, ground + fly, dt * 5);
       e.mesh.rotation.y = Math.atan2(dir.x, dir.z);
       e.mesh.rotation.x = Math.sin(this.clock * 2.8 + e.phase) * 0.08;
@@ -1776,6 +2028,12 @@ class Game {
     const playerHitY = this.player.pos.y + 1.0;
     const updateList = (arr, enemy) => {
       for (const b of arr) {
+        // Pilgrim Rounds: player shots bend toward the nearest enemy before they move.
+        if (!enemy && this.player.homing > 0 && this.enemies.length) {
+          let best = null, bd = 58 * 58;
+          for (const e of this.enemies) { if (e.dead) continue; const dx = e.pos.x - b.mesh.position.x, dy = e.pos.y - b.mesh.position.y, dz = e.pos.z - b.mesh.position.z; const dd = dx * dx + dy * dy + dz * dz; if (dd < bd) { bd = dd; best = e; } }
+          if (best) { const to = (this._homeVec ||= new THREE.Vector3()).set(best.pos.x - b.mesh.position.x, best.pos.y - b.mesh.position.y, best.pos.z - b.mesh.position.z).normalize(); const sp = b.vel.length(); b.vel.lerp(to.multiplyScalar(sp), Math.min(1, dt * this.player.homing * 3.2)); }
+        }
         b.life -= dt; b.mesh.position.addScaledVector(b.vel, dt);
         b.mesh.rotation.y += dt * 6;
         trail.copy(b.vel).normalize().multiplyScalar(-0.4);
@@ -1791,7 +2049,7 @@ class Game {
             if (e.dead) continue;
             const dx = e.pos.x - b.mesh.position.x, dy = e.pos.y - b.mesh.position.y, dz = e.pos.z - b.mesh.position.z;
             const rr = e.radius + b.radius;
-            if (dx * dx + dy * dy + dz * dz < rr * rr) { this.damageEnemy(e, b.damage, b.mesh.position, 0x62f7ff); b.life = 0; consumed = true; break; }
+            if (dx * dx + dy * dy + dz * dz < rr * rr) { this.damageEnemy(e, b.damage, b.mesh.position, 0x62f7ff); if (this.player.chain) this.arcChain(e, this.player.chain, b.damage * 0.45); b.life = 0; consumed = true; break; }
           }
           if (!consumed) for (const d of this.destructibles) {
             if (d.dead) continue;
@@ -1841,6 +2099,7 @@ class Game {
     this.run.kills++; this.run.combo = Math.min(20, this.run.combo + 1); this.run.comboTimer = 3.5;
     if (this.run.combo >= 3) this.showCombo(Math.floor(this.run.combo));
     this.player.energy = Math.min(this.player.maxEnergy, this.player.energy + 8 + this.run.combo * 0.6);
+    if (this.player.lifesteal && this.player.hp < this.player.maxHp) { this.player.hp = Math.min(this.player.maxHp, this.player.hp + this.player.lifesteal); this.floaters?.spawn((this._lsFloat ||= new THREE.Vector3()).set(this.player.pos.x, this.player.pos.y + 1.8, this.player.pos.z), `+${this.player.lifesteal}`, 'heal'); }
     if (Math.random() < this.player.killDashRefund) this.player.dashCd = Math.min(this.player.dashCd, 0.06);
     const drops = e.type === 'brute' ? 8 : e.type === 'sentinel' ? 5 : 3;
     for (let i = 0; i < drops; i++) this.spawnPickup(e.pos, 'awe', e.type === 'brute' ? 8 : 5, color);
@@ -1851,6 +2110,10 @@ class Game {
         const dir = new THREE.Vector3(Math.cos(i / 3 * TAU + Math.random()), randRange(-0.1, 0.25), Math.sin(i / 3 * TAU + Math.random())).normalize();
         this.fireProjectile(false, e.pos.clone().add(new THREE.Vector3(0, 0.8, 0)), dir, 'split');
       }
+    }
+    // a popped spore scatters into two skittering motes
+    if (e.type === 'spore' && this.enemies.length < 40) {
+      for (let i = 0; i < 2; i++) { const a = Math.random() * TAU; this.spawnEnemyAt('mote', e.pos.x + Math.cos(a) * 1.2, e.pos.z + Math.sin(a) * 1.2, e.biome); }
     }
   }
   pickupMaterial(type, color) {
@@ -1929,6 +2192,13 @@ class Game {
     let nearest = null, dBest = Infinity;
     for (const it of active) {
       const d = it.pos.distanceTo(this.player.pos);
+      // Points of interest are discovered Bethesda-style — just by walking up to them; their
+      // guardians stir as you close in. They never take an E-prompt, so handle and skip here.
+      if (it.type === 'poi') {
+        if (!save.seen[it.key] && d < it.discoverR) this.discoverPOI(it);
+        if (it.guarded && d < 46 && !this.guardSpawned.has(it.key)) { this.guardSpawned.add(it.key); this.spawnGuards(it); }
+        continue;
+      }
       const radius = it.radius + (it.type === 'vista' ? this.player.senseRange * 0.02 : 0);
       if (d < radius && d < dBest) { nearest = it; dBest = d; }
       if (it.type === 'home' && d < it.radius) this.player.hp = Math.min(this.player.maxHp, this.player.hp + dt * (this.player.homeHeal * 0.22));
@@ -1964,6 +2234,21 @@ class Game {
       return;
     }
   }
+  discoverPOI(it) {
+    save.seen[it.key] = 1; save.discoveries = (save.discoveries || 0) + 1; storeSave();
+    this.run.awe += 14;
+    this.toast(`Discovered: ${it.name}`, 3.6);
+    this.showRealization(it.note || choice(REALIZATIONS));
+    this.audio.upgrade();
+    this.shake = Math.max(this.shake, 0.2);
+    this.particles.spawn((this._poiFx ||= new THREE.Vector3()).copy(it.pos), 0xffd36e, 30, 1.3);
+  }
+  spawnGuards(it) {
+    const biome = this.world.biomeAt(it.pos.x, it.pos.z);
+    this.spawnEnemyAt('warden', it.pos.x, it.pos.z, biome);
+    for (let i = 0; i < 3; i++) { const a = i / 3 * TAU; this.spawnEnemyAt(choice(BIOMES[biome].enemy), it.pos.x + Math.cos(a) * 6, it.pos.z + Math.sin(a) * 6, biome); }
+    this.toast(`A warden stirs at ${it.name}.`, 3.0);
+  }
   openUpgrade(reason = 'vista') {
     if (this.mode !== 'play') return;
     this.mode = 'upgrade'; document.exitPointerLock?.(); setScreen(upgradeEl); hide(touchEl);
@@ -1985,7 +2270,8 @@ class Game {
   }
   flavorFor(id) {
     const map = {
-      velocity: 'Your legs stop asking permission from the pavement.', dash: 'Distance becomes a negotiable little bastard.', glide: 'Gravity remembers it was supposed to be a conversation.', hearth: 'Lit windows become coordinates, not decoration.', mirror: 'Your shots learn the ugly social habit of multiplying.', oasis: 'The body becomes less fragile in places that should kill it.', magnet: 'The city starts throwing its loose change into your ribs.', slash: 'Close range stops being panic and becomes punctuation.', surge: 'Weather briefly joins your side of the argument.', shield: 'Pain gets a smaller office and worse lighting.', rail: 'The lightlines decide your momentum is legally delicious.', vista: 'The horizon gets less stingy.'
+      velocity: 'Your legs stop asking permission from the pavement.', dash: 'Distance becomes a negotiable little bastard.', glide: 'Gravity remembers it was supposed to be a conversation.', hearth: 'Lit windows become coordinates, not decoration.', mirror: 'Your shots learn the ugly social habit of multiplying.', oasis: 'The body becomes less fragile in places that should kill it.', magnet: 'The city starts throwing its loose change into your ribs.', slash: 'Close range stops being panic and becomes punctuation.', surge: 'Weather briefly joins your side of the argument.', shield: 'Pain gets a smaller office and worse lighting.', rail: 'The lightlines decide your momentum is legally delicious.', vista: 'The horizon gets less stingy.',
+      chain: 'Your aim develops a gossip problem; everyone nearby hears about it.', homing: 'Your bullets convert to a faith and go looking for sinners.', slam: 'You start charging the ground rent for your descent.', timeDodge: 'The dash buys a half-second the rest of the world has to honor.', lifesteal: 'Every kill leaves a small, warm tip in your chest.', revive: 'The story keeps a spare line for you, used once, without comment.'
     };
     return map[id] || 'The atlas improves one of your verbs.';
   }
@@ -2020,6 +2306,64 @@ class Game {
       const idx = Math.round((((angle % TAU) + TAU) % TAU) / TAU * 8) % 8;
       compassEl.textContent = `${arrows[idx]} wonder ${formatMeters(best)}`;
     } else compassEl.textContent = 'no nearby wonder';
+    // minimap refresh (throttled — the canvas is small but there's no need to redraw every frame)
+    this.miniT = (this.miniT || 0) - dt;
+    if (this.miniT <= 0) { this.miniT = 0.07; this.drawMinimap(); }
+  }
+  drawMinimap() {
+    const cv = minimapEl; if (!cv) return;
+    const ctx = this._miniCtx || (this._miniCtx = cv.getContext('2d'));
+    if (!ctx) return;
+    const W = cv.width, H = cv.height, cx = W / 2, cy = H / 2, R = Math.min(cx, cy) - 2;
+    const p = this.player, range = 190, scale = R / range;
+    const px = p.pos.x, pz = p.pos.z;
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.clip();
+    // biome-tinted backdrop
+    const info = BIOMES[this.world.biomeAt(px, pz)];
+    const g = this.tmpColor2 || (this.tmpColor2 = new THREE.Color());
+    g.set(info.sky);
+    ctx.fillStyle = `rgba(${Math.round(g.r * 80 + 6)},${Math.round(g.g * 80 + 6)},${Math.round(g.b * 90 + 10)},0.82)`;
+    ctx.fillRect(0, 0, W, H);
+    // faint range rings
+    ctx.strokeStyle = 'rgba(191,240,255,0.10)'; ctx.lineWidth = 1;
+    for (let rr = R / 3; rr < R; rr += R / 3) { ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.stroke(); }
+    const active = this.nearActive || this.world.activeNear(px, pz);
+    const onMap = (wx, wz) => { const bx = cx + (wx - px) * scale, by = cy + (wz - pz) * scale; return (bx - cx) * (bx - cx) + (by - cy) * (by - cy) <= R * R ? [bx, by] : null; };
+    // rails as faint cyan threads
+    ctx.strokeStyle = 'rgba(98,247,255,0.30)'; ctx.lineWidth = 1.4;
+    for (const r of active.rails) {
+      const a = onMap(r.start.x, r.start.z), b = onMap(r.end.x, r.end.z);
+      if (a && b) { ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke(); }
+    }
+    // enemies (boss bigger)
+    for (const e of this.enemies) {
+      if (e.dead) continue; const m = onMap(e.pos.x, e.pos.z); if (!m) continue;
+      ctx.fillStyle = e.boss ? '#ff3b5e' : 'rgba(255,96,118,0.85)';
+      ctx.beginPath(); ctx.arc(m[0], m[1], e.boss ? 3.6 : 2, 0, TAU); ctx.fill();
+    }
+    // interactables: POIs (diamonds), shrines/landmarks (dots), homes (squares), water (faint)
+    for (const it of active.interactables) {
+      const m = onMap(it.pos.x, it.pos.z); if (!m) continue; const seen = !!save.seen[it.key];
+      if (it.type === 'poi') {
+        ctx.lineWidth = 1.4; ctx.strokeStyle = seen ? '#ffd36e' : 'rgba(255,211,110,0.6)'; ctx.fillStyle = '#ffd36e';
+        const s = seen ? 4.2 : 3.6; ctx.beginPath(); ctx.moveTo(m[0], m[1] - s); ctx.lineTo(m[0] + s, m[1]); ctx.lineTo(m[0], m[1] + s); ctx.lineTo(m[0] - s, m[1]); ctx.closePath();
+        if (seen) ctx.fill(); else ctx.stroke();
+      } else if (it.type === 'vista') {
+        ctx.fillStyle = seen ? 'rgba(159,116,255,0.75)' : '#cda6ff'; ctx.beginPath(); ctx.arc(m[0], m[1], 2.2, 0, TAU); ctx.fill();
+      } else if (it.type === 'home') {
+        ctx.fillStyle = '#ffb66e'; ctx.fillRect(m[0] - 2, m[1] - 2, 4, 4);
+      } else if (it.type === 'water') {
+        ctx.fillStyle = 'rgba(98,247,255,0.30)'; ctx.beginPath(); ctx.arc(m[0], m[1], 2, 0, TAU); ctx.fill();
+      }
+    }
+    ctx.restore();
+    // ring border + player arrow (north-up; arrow rotates to facing)
+    ctx.strokeStyle = 'rgba(191,240,255,0.5)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.stroke();
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(Math.atan2(-Math.sin(p.yaw), -Math.cos(p.yaw)) + Math.PI / 2);
+    ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(4.4, 5); ctx.lineTo(0, 2.4); ctx.lineTo(-4.4, 5); ctx.closePath(); ctx.fill();
+    ctx.restore();
   }
   render(dt) {
     if (!this.renderer) return;

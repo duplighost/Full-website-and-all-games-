@@ -205,6 +205,9 @@ button {
 .readout, .stats, .compass { display: inline-block; margin-top: 9px; color: rgba(255,255,255,.78); background: rgba(0,0,0,.24); border: 1px solid rgba(255,255,255,.12); border-radius: 999px; padding: 7px 10px; font-size: 12px; line-height: 1.2; backdrop-filter: blur(10px); }
 .stats { border-radius: 16px; padding: 10px 12px; line-height: 1.55; }
 .compass { margin-left: auto; min-width: 82px; text-align: center; color: var(--gold); }
+.minimap-wrap { position: relative; width: 158px; height: 158px; margin: 0 0 4px auto; }
+.minimap-wrap canvas { width: 158px; height: 158px; display: block; filter: drop-shadow(0 6px 16px rgba(0,0,0,.45)); }
+.minimap-wrap .mm-n { position: absolute; top: 2px; left: 50%; transform: translateX(-50%); font-size: 10px; font-weight: 900; letter-spacing: .1em; color: rgba(191,240,255,.8); text-shadow: 0 1px 3px rgba(0,0,0,.7); pointer-events: none; }
 .prompt {
   position: absolute;
   left: 50%; bottom: max(72px, env(safe-area-inset-bottom));
@@ -424,6 +427,8 @@ button {
   .top-left { width: min(360px, 62vw); }
   .stats { display: none; }
   .compass { display: none; }
+  .minimap-wrap { width: 112px; height: 112px; }
+  .minimap-wrap canvas { width: 112px; height: 112px; }
   .prompt { bottom: 188px; }
 }
 @media (max-height: 540px) and (orientation: landscape) {
