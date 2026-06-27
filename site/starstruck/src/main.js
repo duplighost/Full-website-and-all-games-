@@ -164,9 +164,10 @@ const ENEMY = {
   orbiter:  { hp: 50,  radius: 0.72, fly: 5.0,  color: 0x9f74ff, contact: 0,  spawnY: 5.0, flier: true },
   spore:    { hp: 34,  radius: 0.8,  fly: 1.4,  color: 0x75ffb1, contact: 7,  spawnY: 1.5 },
   warden:   { hp: 240, radius: 1.7,  fly: 1.15, color: 0xff3b5e, contact: 16, spawnY: 1.3, boss: true },
-  seraph:   { hp: 210, radius: 1.4,  fly: 7.0,  color: 0xff8fd0, contact: 14, spawnY: 7.0, boss: true, flier: true }
+  seraph:   { hp: 210, radius: 1.4,  fly: 7.0,  color: 0xff8fd0, contact: 14, spawnY: 7.0, boss: true, flier: true },
+  maw:      { hp: 300, radius: 1.95, fly: 1.0,  color: 0x7a2dff, contact: 15, spawnY: 1.2, boss: true }
 };
-const BOSS_NAMES = { warden: 'THE WARDEN', seraph: 'THE SERAPH' };
+const BOSS_NAMES = { warden: 'THE WARDEN', seraph: 'THE SERAPH', maw: 'THE MAW' };
 
 // Unique discoverable "points of interest" — named places you stumble on, Bethesda-style.
 // Builders are ChunkManager.poi_<kind>; this table holds the discovery copy + behaviour flags.
@@ -220,6 +221,46 @@ const START_HINTS = [
   'Dash through danger. Hold jump after upgrades. Keep moving.'
 ];
 
+// Environmental storytelling: each scattered scene carries an "echo" — a fragment of micro-fiction
+// that surfaces when you wander close, implying who was here and what the place cost them.
+const LORE_ECHOES = {
+  camp: [
+    'Two people argued here about whether to keep going. The fire went out before they did.',
+    'Someone banked these coals like they meant to come back. The dust has its own opinion.',
+    'A camp is a sentence the road interrupts. This one stops mid-word.'
+  ],
+  graves: [
+    'Someone buried what they could and named none of it. Maybe the names were the part that hurt.',
+    'Five markers, four leaning. The fifth is newer, and no one was left to lean it.',
+    'They dug in ground that glows. Even the dead here are kept slightly, cruelly awake.'
+  ],
+  wreck: [
+    'It came down hard and kept most of its secrets. The cargo is still warm; the pilot is not here.',
+    "Whatever flew this didn't walk away. The harness is unbuckled, which is the worst detail.",
+    'A machine built for crossing distances, undone by the last short one.'
+  ],
+  bones: [
+    'Something enormous lay down here and decided to become scenery. The grass accepted the offer.',
+    'These ribs arch like a cathedral nobody finished being afraid in.',
+    'Too big to bury, so the world is doing it slowly, politely, over centuries.'
+  ],
+  statue: [
+    'They built a monument to certainty. Gravity submitted its review.',
+    'The face is worn smooth. Whoever it flattered is flattered no longer.',
+    'A hero, probably. Heroes are just the people the survivors agreed to keep.'
+  ],
+  cairn: [
+    'Each stone is a promise that the path continues. Most of them are lying, kindly.',
+    'Someone stacked these to be found. You are the first finding in a long while.',
+    'A little tower of agreement: this way, this way, this way — and then nothing.'
+  ],
+  garden: [
+    'Someone tried to make this place gentle. The attempt outlived the gardener.',
+    "Planted in rows, watered by a hand that isn't here. It bloomed anyway, out of spite or habit.",
+    'A garden, in a place like this, is an argument. It appears to be winning.'
+  ]
+};
+
 const BREAKABLE_RETICLE = 'rgba(98,247,255,.92)';
 const INTERACT_RETICLE = 'rgba(255,211,110,.96)';
 const REALIZATIONS = [
@@ -266,9 +307,9 @@ function hasWebGL() {
 
 function loadSave() {
   try {
-    return Object.assign({ best: 0, runs: 0, totalAwe: 0, discoveries: 0, seen: {}, journal: {}, quality: null }, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}'));
+    return Object.assign({ best: 0, runs: 0, totalAwe: 0, discoveries: 0, echoes: 0, seen: {}, journal: {}, quality: null }, JSON.parse(localStorage.getItem(SAVE_KEY) || '{}'));
   } catch (_) {
-    return { best: 0, runs: 0, totalAwe: 0, discoveries: 0, seen: {}, journal: {}, quality: null };
+    return { best: 0, runs: 0, totalAwe: 0, discoveries: 0, echoes: 0, seen: {}, journal: {}, quality: null };
   }
 }
 function storeSave() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(save)); } catch (_) {} }
@@ -940,6 +981,10 @@ class ChunkManager {
     if (!(cx === 0 && cz === 0) && hash2(cx * 7 + 3, cz * 7 - 5) > 0.88) {
       this.addPOI({ ...ctx, id: 2 });
     }
+    // Environmental storytelling: a scattered scene (camp, graves, wreck, bones…) in many chunks.
+    if (!(cx === 0 && cz === 0) && hash2(cx * 5 - 7, cz * 5 + 11) > 0.66) {
+      this.addVignette({ ...ctx, id: 3 });
+    }
   }
   addTerrain(group, cx, cz, biome) {
     const div = this.detail;
@@ -1389,6 +1434,73 @@ class ChunkManager {
     ctx.addLight?.(0x9f74ff, 2.8, 30, 2, lx, y0 + 2, lz - 12);
     this.addRelic(ctx, lx, lz - 12, y0, 'cathedral');
   }
+  // ---- environmental storytelling: scattered scenes that imply a story, each with an echo ----
+  addEcho(ctx, lx, lz, y, kind) {
+    const lines = LORE_ECHOES[kind] || LORE_ECHOES.cairn;
+    const note = lines[Math.floor(ctx.rng() * lines.length)];
+    ctx.addMesh(this.geos.sphere, this.mats.window, lx, y + 1.5, lz, 0.22, 0.22, 0.22); // a hovering wisp of memory
+    ctx.addLight?.(0x9affd8, 1.0, 9, 2, lx, y + 1.5, lz);
+    const wx = ctx.ox + lx, wz = ctx.oz + lz, k = keyName(wx, wz, 'echo', 1);
+    ctx.interactables.push({ type: 'echo', key: k, kind, note, pos: new THREE.Vector3(wx, y + 1.0, wz), radius: 6.5, used: !!save.seen[k] });
+  }
+  addVignette(ctx) {
+    const lx = randRangeR(ctx.rng, -30, 30), lz = randRangeR(ctx.rng, -30, 30);
+    if (Math.abs(lx) < 8 && Math.abs(lz) < 8) return;
+    const kinds = ['camp', 'graves', 'wreck', 'bones', 'statue', 'cairn', 'garden'];
+    const kind = kinds[Math.floor(ctx.rng() * kinds.length)];
+    this['vignette' + kind[0].toUpperCase() + kind.slice(1)](ctx, lx, lz);
+  }
+  vignetteCamp(ctx, lx, lz) {
+    const y = this.heightAt(ctx.ox + lx, ctx.oz + lz);
+    for (let i = 0; i < 7; i++) { const a = i / 7 * TAU; ctx.addMesh(this.geos.sphere, this.mats.rock, lx + Math.cos(a) * 1.1, y + 0.15, lz + Math.sin(a) * 1.1, 0.3, 0.22, 0.3); }
+    ctx.addMesh(this.geos.cyl, this.mats.dark, lx, y + 0.2, lz, 0.55, 0.3, 0.55);
+    for (let i = 0; i < 2; i++) ctx.addMesh(this.geos.cyl, this.mats.trunk, lx, y + 0.3, lz, 0.12, 1.5, 0.12, i ? 0.8 : -0.8, Math.PI / 2);
+    ctx.addMesh(this.geos.sphere, this.mats.ember, lx, y + 0.2, lz, 0.18, 0.12, 0.18); // a last live coal
+    for (const sx of [-1.8, 1.8]) ctx.addMesh(this.geos.cyl, this.mats.warmWall, lx + sx, y + 0.25, lz + 0.6, 0.35, 0.5, 0.35);
+    this.addEcho(ctx, lx, lz, y, 'camp');
+  }
+  vignetteGraves(ctx, lx, lz) {
+    const y0 = this.heightAt(ctx.ox + lx, ctx.oz + lz);
+    ctx.addMesh(this.geos.cyl, this.mats.trunk, lx, y0 + 1.4, lz, 0.3, 2.8, 0.3);
+    for (let i = 0; i < 3; i++) { const a = i / 3 * TAU; ctx.addMesh(this.geos.cyl, this.mats.trunk, lx + Math.cos(a) * 0.7, y0 + 2.7, lz + Math.sin(a) * 0.7, 0.12, 1.3, 0.12, a, 0.8); }
+    for (let i = 0; i < 5; i++) { const ox = randRangeR(ctx.rng, -3, 3), oz = randRangeR(ctx.rng, 1, 4), gy = this.heightAt(ctx.ox + lx + ox, ctx.oz + lz + oz); ctx.addMesh(this.geos.box, this.mats.concrete, lx + ox, gy + 0.6, lz + oz, 0.62, 1.2, 0.16, randRangeR(ctx.rng, -0.3, 0.3)); }
+    this.addEcho(ctx, lx, lz + 2, y0, 'graves');
+  }
+  vignetteWreck(ctx, lx, lz) {
+    const y0 = this.heightAt(ctx.ox + lx, ctx.oz + lz);
+    ctx.addMesh(this.geos.cyl, this.mats.dark, lx, y0 + 0.07, lz, 3.4, 0.1, 3.4);                 // scorch
+    ctx.addMesh(this.geos.box, this.mats.wall, lx, y0 + 0.7, lz, 3.2, 1.4, 1.8, randRangeR(ctx.rng, -0.4, 0.4));
+    for (let i = 0; i < 5; i++) { const ox = randRangeR(ctx.rng, -4, 4), oz = randRangeR(ctx.rng, -4, 4); ctx.addMesh(this.geos.box, this.mats.concrete, lx + ox, this.heightAt(ctx.ox + lx + ox, ctx.oz + lz + oz) + 0.3, lz + oz, randRangeR(ctx.rng, 0.5, 1.2), 0.4, randRangeR(ctx.rng, 0.5, 1.2), ctx.rng() * TAU); }
+    this.addPod(ctx, lx + randRangeR(ctx.rng, -3, 3), lz + randRangeR(ctx.rng, -3, 3), 0xff4fd8); // spilled cargo (loot)
+    this.addEcho(ctx, lx, lz, y0, 'wreck');
+  }
+  vignetteBones(ctx, lx, lz) {
+    const y0 = this.heightAt(ctx.ox + lx, ctx.oz + lz);
+    for (let i = 0; i < 6; i++) { const oz = (i - 2.5) * 1.6, s = 1 - Math.abs(i - 2.5) / 7; ctx.addMesh(this.geos.torus, this.mats.snow, lx, y0 + 2.0 * s, lz + oz, 1.7 * s, 2.6 * s, 0.3); } // rib arches
+    for (let i = 0; i < 7; i++) ctx.addMesh(this.geos.sphere, this.mats.snow, lx, y0 + 0.3, lz + (i - 3) * 1.4, 0.4, 0.3, 0.4); // spine
+    ctx.addMesh(this.geos.sphere, this.mats.snow, lx, y0 + 0.8, lz - 5.4, 1.2, 1.0, 1.5);   // skull
+    this.addEcho(ctx, lx, lz, y0, 'bones');
+  }
+  vignetteStatue(ctx, lx, lz) {
+    const y0 = this.heightAt(ctx.ox + lx, ctx.oz + lz);
+    ctx.addMesh(this.geos.box, this.mats.concrete, lx, y0 + 0.4, lz, 2.4, 0.8, 2.4);          // pedestal
+    ctx.addMesh(this.geos.cyl, this.mats.rock, lx, y0 + 1.5, lz, 0.5, 1.6, 0.5);              // snapped legs
+    ctx.addMesh(this.geos.cyl, this.mats.rock, lx + 1.7, y0 + 0.6, lz + 1.2, 0.5, 2.6, 0.5, 0.5, Math.PI / 2); // fallen torso
+    ctx.addMesh(this.geos.sphere, this.mats.rock, lx + 3.1, y0 + 0.6, lz + 1.6, 0.6, 0.6, 0.6); // fallen head
+    this.addEcho(ctx, lx, lz, y0, 'statue');
+  }
+  vignetteCairn(ctx, lx, lz) {
+    const y0 = this.heightAt(ctx.ox + lx, ctx.oz + lz);
+    for (let c = 0; c < 3; c++) { const ox = randRangeR(ctx.rng, -3, 3), oz = randRangeR(ctx.rng, -3, 3); let yy = this.heightAt(ctx.ox + lx + ox, ctx.oz + lz + oz); const n = 2 + Math.floor(ctx.rng() * 3); for (let i = 0; i < n; i++) { const r = 0.46 - i * 0.08; ctx.addMesh(this.geos.sphere, this.mats.rock, lx + ox, yy + r, lz + oz, r, r * 0.8, r); yy += r * 1.5; } }
+    this.addEcho(ctx, lx, lz, y0, 'cairn');
+  }
+  vignetteGarden(ctx, lx, lz) {
+    const y0 = this.heightAt(ctx.ox + lx, ctx.oz + lz);
+    ctx.addMesh(this.geos.torus, this.mats.concrete, lx, y0 + 0.4, lz, 1.8, 1.8, 1.8, 0, Math.PI / 2); // dry fountain ring
+    ctx.addMesh(this.geos.cyl, this.mats.dark, lx, y0 + 0.3, lz, 0.5, 0.6, 0.5);
+    for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; this.addCrystal(ctx, lx + Math.cos(a) * 3.2, lz + Math.sin(a) * 3.2, [0x75ffb1, 0xffd36e, 0x62f7ff][i % 3], 0.7); }
+    this.addEcho(ctx, lx, lz, y0, 'garden');
+  }
   addStartGarden(ctx) {
     this.addPod(ctx, 0, 26, 0x75ffb1);
     this.addCrystal(ctx, -5, 35, 0xffd36e, 0.85);
@@ -1465,6 +1577,8 @@ class Game {
     this.destructibles = [];     // scratch list of nearby breakables
     this.muzzleFlash = null;
     this.autoFireCd = 0;
+    this.hazards = [];           // active AoE ground hazards (the Maw)
+    this.runFound = []; this.runRelics = []; this.runEchoes = 0;
   }
   async init() {
     if (!hasWebGL()) { setScreen(webglError); return; }
@@ -1547,6 +1661,16 @@ class Game {
     };
     dirDmg.innerHTML = '<div class="arc"></div>';
     this.dirArc = dirDmg.querySelector('.arc');
+    // AoE ground-hazard telegraph (the Maw): a flat glowing disc that grows then detonates
+    this.hazardGeo = new THREE.CylinderGeometry(1, 1, 0.08, 28);
+    this.hazardMat = new THREE.MeshBasicMaterial({ color: 0xff3b5e, transparent: true, opacity: 0.3, depthWrite: false });
+    // shot-variant materials so relics visibly change your fire (pierce/homing/chain)
+    this.shotMats = {
+      default: this.projectileMat,
+      pierce: new THREE.MeshStandardMaterial({ color: 0xeafdff, emissive: 0xaef6ff, emissiveIntensity: 2.2, roughness: 0.2 }),
+      homing: new THREE.MeshStandardMaterial({ color: 0xd9b6ff, emissive: 0x9a5cff, emissiveIntensity: 2.0, roughness: 0.25 }),
+      chain: new THREE.MeshStandardMaterial({ color: 0xfff0b0, emissive: 0xffd36e, emissiveIntensity: 2.1, roughness: 0.25 })
+    };
   }
   makeHealthBar() {
     const bar = new THREE.Group();
@@ -1634,7 +1758,10 @@ class Game {
     this.run = { start: performance.now(), awe: 0, xp: 0, nextXp: 70, kills: 0, upgrades: 0, distance: 0, combo: 0, comboTimer: 0 };
     this.guardSpawned = new Set(); // POIs whose wardens have already been roused this run
     this.relicsClaimed = new Set(); // relics taken this run (re-earned each run)
-    this._lastCombat = -99;
+    this.runFound = []; this.runRelics = []; this.runEchoes = 0; // for the end-of-run summary
+    this._lastCombat = -99; this._echoCd = 0;
+    for (const h of this.hazards || []) if (h.mesh) this.scene.remove(h.mesh);
+    this.hazards = []; // active AoE ground-slam telegraphs (the Maw)
     this.world.buildQueue.length = 0; this.world.buildSet.clear();
     this.world.update(this.player.pos, 1, 4.5);
     this.player.setSolids(this.world.collectSolids(this.player.pos.x, this.player.pos.z, this.solids));
@@ -1644,6 +1771,8 @@ class Game {
   clearActors() {
     for (const e of this.enemies) { if (e.mesh) { this.scene.remove(e.mesh); e.mat?.dispose?.(); e.mesh.traverse?.(o => { if (o.material && o.material !== e.mat && o.material !== this.enemyDarkMat) o.material.dispose?.(); }); } if (e.bar) this.scene.remove(e.bar); }
     for (const arr of [this.projectiles, this.enemyProjectiles, this.pickups]) for (const o of arr) if (o.mesh) this.scene.remove(o.mesh);
+    for (const h of this.hazards) { this.scene.remove(h.mesh); h.mesh.material.dispose?.(); }
+    this.hazards.length = 0;
     this.projectiles.length = this.enemyProjectiles.length = this.enemies.length = this.pickups.length = 0;
     this.input.shoot = this.input.slash = false; this.input.fireQueued = this.input.slashQueued = this.input.dashQueued = this.input.jumpQueued = this.input.surgeQueued = this.input.interactQueued = 0;
     this.floaters?.clear();
@@ -1674,7 +1803,7 @@ class Game {
   renderJournal() {
     const entries = Object.values(save.journal || {}).sort((a, b) => a.dist - b.dist);
     journalSummary.textContent = entries.length
-      ? `${entries.length} named place${entries.length === 1 ? '' : 's'} logged · ${save.discoveries || 0} wonders stolen across all runs`
+      ? `${entries.length} named place${entries.length === 1 ? '' : 's'} logged · ${save.discoveries || 0} wonders stolen · ${save.echoes || 0} echoes heard`
       : 'Nothing logged yet. Wander out and let some glow introduce itself.';
     const icon = (k) => k === 'poi' || POI_DEFS[k] ? '◆' : '✦';
     journalList.innerHTML = entries.length
@@ -1684,7 +1813,19 @@ class Game {
   die() {
     this.mode = 'death'; document.exitPointerLock?.();
     save.runs++; save.best = Math.max(save.best || 0, this.run.distance); save.totalAwe = (save.totalAwe || 0) + Math.floor(this.run.awe); storeSave();
-    deathStats.textContent = this.runSummary(); setScreen(deathEl); hide(touchEl);
+    deathStats.textContent = this.runSummary();
+    this.renderRunLog();
+    setScreen(deathEl); hide(touchEl);
+  }
+  renderRunLog() {
+    const el = $('deathLog'); if (!el) return;
+    const uniq = a => [...new Set(a)];
+    const found = uniq(this.runFound), relics = uniq(this.runRelics);
+    const rows = [];
+    if (found.length) rows.push(`<div class="rl-group"><span class="rl-head">◆ Found this run</span>${found.map(n => `<span class="rl-item">${n}</span>`).join('')}</div>`);
+    if (relics.length) rows.push(`<div class="rl-group"><span class="rl-head">✶ Relics claimed</span>${relics.map(n => `<span class="rl-item">${n}</span>`).join('')}</div>`);
+    if (this.runEchoes > 0) rows.push(`<div class="rl-group"><span class="rl-head">✦ Echoes heard</span><span class="rl-item">${this.runEchoes} fragment${this.runEchoes === 1 ? '' : 's'} of someone else's story</span></div>`);
+    el.innerHTML = rows.length ? rows.join('') : '<p class="tiny">You went out fast and found nothing but the floor. The atlas respects the commitment.</p>';
   }
   runSummary() { return `${formatMeters(this.run.distance)} from the center · ${this.run.kills} kills · ${this.run.upgrades} upgrades · ${Math.floor(this.run.awe)} awe stolen`; }
   frame(t) {
@@ -1712,6 +1853,7 @@ class Game {
     this.applyRailAssist(dt);
     this.handlePlayerAttacks(dt);
     this.updateEnemies(dt);
+    this.updateHazards(dt);
     this.updateProjectiles(dt);
     this.updatePickups(dt);
     this.updateDestructibles(dt);
@@ -1744,6 +1886,37 @@ class Game {
     for (const d of this.destructibles) if (!d.dead && d.pos.distanceTo(p.pos) < radius + d.radius) this.damageDestructible(d, dmg, p.pos, { crit: true });
     this.particles.spawn((this._slamFx ||= new THREE.Vector3()).set(p.pos.x, p.pos.y + 0.2, p.pos.z), 0xffd36e, 50, 1.8);
     this.shake = Math.max(this.shake, 0.6); this.hitStop = Math.max(this.hitStop, 0.05); this.audio.tone(70, 0.3, 'sine', 0.09, 2.4);
+  }
+  // A delayed AoE: a disc telegraphs (grows + brightens) for `delay` seconds, then detonates,
+  // hurting the player if they're still inside. The Maw paints the ground with these.
+  spawnHazard(x, z, radius, delay, dmg) {
+    const y = this.world.heightAt(x, z) + 0.09;
+    const mesh = new THREE.Mesh(this.hazardGeo, this.hazardMat.clone());
+    mesh.position.set(x, y, z); mesh.scale.set(radius * 0.5, 1, radius * 0.5); this.scene.add(mesh);
+    this.hazards.push({ x, z, y, radius, t: 0, delay, dmg, mesh, detonated: false, dead: false });
+  }
+  updateHazards(dt) {
+    const p = this.player;
+    for (const h of this.hazards) {
+      h.t += dt;
+      if (!h.detonated) {
+        const prog = clamp(h.t / h.delay, 0, 1);
+        h.mesh.material.opacity = 0.16 + prog * 0.55;
+        const s = h.radius * (0.5 + prog * 0.5); h.mesh.scale.set(s, 1, s);
+        if (h.t >= h.delay) {
+          h.detonated = true; h.t = 0;
+          const dx = p.pos.x - h.x, dz = p.pos.z - h.z;
+          if (dx * dx + dz * dz < h.radius * h.radius && p.hurt(h.dmg, (this._hzPos ||= new THREE.Vector3()).set(h.x, p.pos.y, h.z), this)) p.hp = 0;
+          this.particles.spawn((this._hzFx ||= new THREE.Vector3()).set(h.x, h.y + 0.3, h.z), 0xff6a55, 40, 1.9);
+          this.shake = Math.max(this.shake, 0.4); this.audio.tone(78, 0.22, 'square', 0.06, 0.5);
+          h.mesh.material.color.setHex(0xffd36e); h.mesh.material.opacity = 0.88; h.mesh.scale.set(h.radius, 1, h.radius);
+        }
+      } else {
+        h.mesh.material.opacity = Math.max(0, h.mesh.material.opacity - dt * 3.2);
+        if (h.t > 0.34) h.dead = true;
+      }
+    }
+    for (let i = this.hazards.length - 1; i >= 0; i--) if (this.hazards[i].dead) { const h = this.hazards[i]; this.scene.remove(h.mesh); h.mesh.material.dispose?.(); this.hazards.splice(i, 1); }
   }
   // Arc Catechism: a hit forks lightning to nearby enemies, each jump drawing a crackle of sparks.
   arcChain(src, jumps, dmg) {
@@ -1934,7 +2107,16 @@ class Game {
     }
   }
   fireProjectile(enemy, pos = null, dir = null, kind = 'pulse') {
-    const mesh = new THREE.Mesh(enemy ? this.enemyProjectileGeo : this.projectileGeo, enemy ? this.enemyProjectileMat : this.projectileMat);
+    // relics restyle your shots: piercing run bigger & white-cyan with a strong trail, homing
+    // glow violet, chain glow gold. Pure cosmetics layered on the same projectile.
+    let variant = 'default', trailColor = 0x62f7ff, trailCount = 1, mscale = 1;
+    if (!enemy) {
+      if (this.player.pierce > 0) { variant = 'pierce'; trailColor = 0xaef6ff; trailCount = 3; mscale = 1.5; }
+      else if (this.player.homing > 0) { variant = 'homing'; trailColor = 0x9a5cff; trailCount = 2; }
+      else if (this.player.chain > 0) { variant = 'chain'; trailColor = 0xffd36e; trailCount = 2; }
+    }
+    const mesh = new THREE.Mesh(enemy ? this.enemyProjectileGeo : this.projectileGeo, enemy ? this.enemyProjectileMat : this.shotMats[variant]);
+    if (!enemy && mscale !== 1) mesh.scale.setScalar(mscale);
     const origin = this._shotOrigin ||= new THREE.Vector3();
     const look = this._shotLook ||= new THREE.Vector3();
     if (pos) origin.copy(pos); else origin.copy(this.camera.position).addScaledVector(this.player.lookVector(look), 0.9);
@@ -1947,7 +2129,7 @@ class Game {
     mesh.position.copy(origin); this.scene.add(mesh);
     const vel = vdir.clone().multiplyScalar(enemy ? 23 : 58);
     if (!enemy) vel.addScaledVector(this.player.vel, 0.35);
-    const obj = { mesh, vel, life: enemy ? 4.2 : 2.3, damage: enemy ? 10 : this.player.shotDamage, radius: enemy ? 0.36 : 0.42, enemy, kind, pierce: enemy ? 0 : this.player.pierce, hits: null };
+    const obj = { mesh, vel, life: enemy ? 4.2 : 2.3, damage: enemy ? 10 : this.player.shotDamage, radius: enemy ? 0.36 : 0.42, enemy, kind, pierce: enemy ? 0 : this.player.pierce, hits: null, trailColor, trailCount };
     (enemy ? this.enemyProjectiles : this.projectiles).push(obj);
   }
   slash() {
@@ -2013,7 +2195,7 @@ class Game {
     const color = stat.color === 'accent' ? info.accent : stat.color;
     const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: type === 'mote' ? 0.9 : 1.35, roughness: 0.36, metalness: 0.05 });
     const dark = this.enemyDarkMat; // shared (the per-enemy animated material is `mat`, kept per-instance)
-    const bodyGeo = (type === 'brute' || type === 'warden') ? this.enemyGeos.brute : type === 'spore' ? this.enemyGeos.shell : this.enemyGeos.body;
+    const bodyGeo = (type === 'brute' || type === 'warden' || type === 'maw') ? this.enemyGeos.brute : type === 'spore' ? this.enemyGeos.shell : this.enemyGeos.body;
     const body = new THREE.Mesh(bodyGeo, mat); group.add(body);
     if (type === 'warden') body.scale.setScalar(1.5);
     if (type === 'sentinel' || type === 'orbiter' || type === 'warden') { const ring = new THREE.Mesh(this.enemyGeos.ring, mat); ring.rotation.x = Math.PI / 2; if (type === 'warden') ring.scale.setScalar(1.6); group.add(ring); group.userData.ring = ring; }
@@ -2025,6 +2207,11 @@ class Game {
       body.scale.setScalar(1.3);
       const halo = new THREE.Mesh(this.enemyGeos.crown, mat); halo.rotation.x = Math.PI / 2; halo.position.y = 1.25; halo.scale.setScalar(1.15); group.add(halo); group.userData.ring = halo;
       for (const sx of [-1, 1]) { const wing = new THREE.Mesh(this.enemyGeos.blade, mat); wing.scale.set(0.7, 2.4, 0.12); wing.position.set(sx * 1.0, 0.25, 0.35); wing.rotation.z = sx * 0.8; wing.rotation.x = -0.3; group.add(wing); }
+    }
+    if (type === 'maw') {
+      body.scale.setScalar(1.6);
+      for (let i = 0; i < 7; i++) { const a = i / 7 * TAU; const spike = new THREE.Mesh(this.enemyGeos.spike, mat); spike.position.set(Math.cos(a) * 1.35, -0.3, Math.sin(a) * 1.35); spike.rotation.x = Math.PI; spike.rotation.z = Math.cos(a) * 0.5; group.add(spike); } // ring of downward jaw-teeth
+      const ring = new THREE.Mesh(this.enemyGeos.ring, mat); ring.rotation.x = Math.PI / 2; ring.scale.setScalar(1.8); group.add(ring); group.userData.ring = ring;
     }
     const eye = new THREE.Mesh(this.enemyGeos.eye, dark); eye.position.set(0, type === 'warden' ? 0.34 : 0.15, type === 'warden' ? -1.05 : -0.62); if (type === 'warden') eye.scale.setScalar(1.8); group.add(eye);
     group.traverse(o => { if (o.isMesh) { o.castShadow = this.quality === 'high' && !IS_TOUCH; o.receiveShadow = this.quality !== 'low'; } });
@@ -2121,7 +2308,7 @@ class Game {
           e.diveT -= dt; e.telegraph = 1; desired.copy(dir).multiplyScalar(26); // swoop straight at you
           if (d < 2.6 && p.hurt(stat.contact, e.pos, this)) p.hp = 0;
         } else {
-          desired.addScaledVector(dir, d > 30 ? 9 : d < 18 ? -8 : 0).addScaledVector(tangent, 11);
+          desired.addScaledVector(dir, d > 30 ? 9 : d < 18 ? -8 : 0).addScaledVector(tangent, 11); // strafe band
           if (e.windup > 0) {
             e.windup -= dt; e.telegraph = 1;
             if (e.windup <= 0) { for (let s = -1; s <= 1; s++) { const sd = (this._serDir ||= new THREE.Vector3()).set(p.pos.x, p.pos.y + 1.0, p.pos.z).sub(e.pos); const a = s * 0.16; const c = Math.cos(a), sn = Math.sin(a); const nx = sd.x * c - sd.z * sn, nz = sd.x * sn + sd.z * c; sd.set(nx, sd.y, nz); this.fireProjectile(true, e.pos, sd); } e.fireCd = enraged ? 1.1 : 1.9; }
@@ -2129,6 +2316,23 @@ class Game {
           if (e.diveCd <= 0 && d < 44 && d > 8) { e.diveT = 0.65; e.diveCd = randRange(5, 8); }
           if (enraged && e.addCd <= 0) { e.addCd = 5.5; for (let i = 0; i < 2; i++) { const a = i ? 1 : -1; this.spawnEnemyAt('wisp', e.pos.x + a * 3, e.pos.z + a * 3, e.biome); } }
         }
+      } else if (e.type === 'maw') {
+        // slow ground zoner: paints delayed AoE slams at your feet, periodically inhales you toward it
+        const enraged = e.hp < e.maxHp * 0.4;
+        desired.addScaledVector(dir, d > 9 ? 3.4 : 0.8);
+        e.fireCd -= dt; e.diveCd -= dt; e.addCd -= dt;
+        if (e.fireCd <= 0 && d < 82) {
+          e.fireCd = enraged ? randRange(0.8, 1.4) : randRange(1.7, 2.5); e.telegraph = 1;
+          this.spawnHazard(p.pos.x + randRange(-4, 4), p.pos.z + randRange(-4, 4), enraged ? 6.5 : 5.2, 1.0, 22);
+          if (enraged) this.spawnHazard(p.pos.x + randRange(-9, 9), p.pos.z + randRange(-9, 9), 4.6, 1.1, 18);
+        }
+        if (e.diveCd <= 0 && d < 58 && d > 6) {
+          e.diveCd = randRange(4.5, 6.5);
+          const pull = (this._mawPull ||= new THREE.Vector3()).copy(e.pos).sub(p.pos).setY(0); if (pull.lengthSq() > 0.01) p.vel.addScaledVector(pull.normalize(), 13);
+          this.toast('The Maw inhales.', 1.3); this.audio.tone(54, 0.4, 'sine', 0.08, 0.4);
+        }
+        if (enraged && e.addCd <= 0) { e.addCd = 6.5; for (let i = 0; i < 2; i++) { const a = i ? 1 : -1; this.spawnEnemyAt(choice(BIOMES[e.biome].enemy), e.pos.x + a * 4, e.pos.z + a * 4, e.biome); } }
+        if (d < 3.0 && p.hurt(stat.contact, e.pos, this)) p.hp = 0;
       } else {
         desired.addScaledVector(dir, 12.5);
         if (d < 3) e.telegraph = 1;
@@ -2180,7 +2384,7 @@ class Game {
         b.life -= dt; b.mesh.position.addScaledVector(b.vel, dt);
         b.mesh.rotation.y += dt * 6;
         trail.copy(b.vel).normalize().multiplyScalar(-0.4);
-        this.particles.spawn(b.mesh.position, enemy ? 0xff5672 : 0x62f7ff, 1, 0.18, trail);
+        this.particles.spawn(b.mesh.position, enemy ? 0xff5672 : (b.trailColor || 0x62f7ff), enemy ? 1 : (b.trailCount || 1), 0.18, trail);
         if (b.mesh.position.y < this.world.heightAt(b.mesh.position.x, b.mesh.position.z) - 1) b.life = 0;
         if (enemy) {
           const dx = b.mesh.position.x - this.player.pos.x, dy = b.mesh.position.y - playerHitY, dz = b.mesh.position.z - this.player.pos.z;
@@ -2271,7 +2475,8 @@ class Game {
       this.spawnPickup(e.pos, 'energy', 1, 0x62f7ff);
       this.particles.spawn(e.pos, 0xffd36e, 80, 2.4); this.particles.spawn(e.pos, 0xffffff, 30, 1.4);
       this.shake = Math.max(this.shake, 0.9); this.hitStop = Math.max(this.hitStop, 0.1);
-      this.toast('The warden folds. The atlas owes you something for that.', 3.2);
+      const bn = (BOSS_NAMES[e.type] || 'THE GUARDIAN').replace('THE ', 'The ');
+      this.toast(`${bn} folds. The atlas owes you something for that.`, 3.2);
       this.openUpgrade('boss');
     }
   }
@@ -2347,6 +2552,7 @@ class Game {
     if (Math.random() < (drop.energy || 0)) this.spawnPickup(d.pos, 'energy', 1, 0x62f7ff);
   }
   handleInteractions(dt) {
+    this._echoCd = Math.max(0, (this._echoCd || 0) - dt);
     const active = (this.nearActive || this.world.activeNear(this.player.pos.x, this.player.pos.z)).interactables;
     let nearest = null, dBest = Infinity;
     for (const it of active) {
@@ -2356,6 +2562,15 @@ class Game {
       if (it.type === 'poi') {
         if (!save.seen[it.key] && d < it.discoverR) this.discoverPOI(it);
         if (it.guarded && d < 46 && !this.guardSpawned.has(it.key)) { this.guardSpawned.add(it.key); this.spawnGuards(it); }
+        continue;
+      }
+      // Echoes: fragments of someone else's story that surface, one at a time, as you wander near.
+      if (it.type === 'echo') {
+        if (!save.seen[it.key] && d < it.radius && this._echoCd <= 0) {
+          save.seen[it.key] = 1; save.echoes = (save.echoes || 0) + 1; this.runEchoes++; storeSave();
+          this._echoCd = 7;
+          this.showRealization(it.note); this.audio.tone(430, 0.18, 'sine', 0.03, 1.4);
+        }
         continue;
       }
       if (it.relicMesh) { it.relicMesh.rotation.y += dt * 1.4; it.relicMesh.position.y = it.relicBaseY + Math.sin(this.clock * 2 + it.pos.x * 0.3) * 0.16; }
@@ -2389,7 +2604,7 @@ class Game {
       this.audio.pickup(); return;
     }
     if (it.type === 'vista') {
-      if (!save.seen[it.key]) { save.seen[it.key] = 1; save.discoveries = (save.discoveries || 0) + 1; this.journalRecord(it); storeSave(); this.openUpgrade('vista'); }
+      if (!save.seen[it.key]) { save.seen[it.key] = 1; save.discoveries = (save.discoveries || 0) + 1; this.journalRecord(it); if (it.name) this.runFound.push(it.name); storeSave(); this.openUpgrade('vista'); }
       else this.showRealization(choice(REALIZATIONS));
       return;
     }
@@ -2397,6 +2612,7 @@ class Game {
       const boon = RELIC_BOONS[it.kind];
       if (this.relicsClaimed.has(it.key)) { this.toast(`${boon.name} already hums in your hands.`); return; }
       this.relicsClaimed.add(it.key);
+      this.runRelics.push(boon.name);
       boon.apply(this.player);
       if (!save.seen[it.key]) { save.seen[it.key] = 1; save.discoveries = (save.discoveries || 0) + 1; this.journalRecord(it); storeSave(); }
       this.toast(`Claimed ${boon.name} — ${boon.effect}`, 4.4);
@@ -2416,6 +2632,7 @@ class Game {
   }
   discoverPOI(it) {
     save.seen[it.key] = 1; save.discoveries = (save.discoveries || 0) + 1; this.journalRecord(it); storeSave();
+    this.runFound.push(it.name);
     this.run.awe += 14;
     this.toast(`Discovered: ${it.name}`, 3.6);
     this.showRealization(it.note || choice(REALIZATIONS));
@@ -2434,8 +2651,8 @@ class Game {
     const biome = this.world.biomeAt(it.pos.x, it.pos.z);
     for (let i = 0; i < 3; i++) { const a = i / 3 * TAU; this.spawnEnemyAt(choice(BIOMES[biome].enemy), it.pos.x + Math.cos(a) * 6, it.pos.z + Math.sin(a) * 6, biome); }
     if (this.enemies.some(e => e.boss && !e.dead)) return; // never more than one boss loose at once
-    // sky-themed POIs are watched over by the aerial Seraph; ruins by the ground-bound Warden
-    const bossType = (it.kind === 'cathedral' || it.kind === 'observatory') ? 'seraph' : 'warden';
+    // each POI theme has its guardian: sky -> Seraph, the ziggurat -> the Maw, ruins -> Warden
+    const bossType = (it.kind === 'cathedral' || it.kind === 'observatory') ? 'seraph' : it.kind === 'ziggurat' ? 'maw' : 'warden';
     const boss = this.spawnEnemyAt(bossType, it.pos.x, it.pos.z, biome);
     this.bossBanner(boss, it.name);
   }
@@ -2489,7 +2706,7 @@ class Game {
     const active = (this.nearActive || this.world.activeNear(p.pos.x, p.pos.z)).interactables;
     let nearest = null, best = Infinity, poiTarget = null, poiBest = Infinity;
     for (const it of active) {
-      if (save.seen[it.key] || it.type === 'water') continue;
+      if (save.seen[it.key] || it.type === 'water' || it.type === 'echo') continue;
       const d = it.pos.distanceTo(p.pos);
       if (it.type === 'poi' && d < poiBest) { poiBest = d; poiTarget = it; }
       if (d < best && d < p.senseRange + 160) { best = d; nearest = it; }
